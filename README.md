@@ -29,3 +29,7 @@ Optional feature to design:
 ### Additions beyond mvp
 
 - Sign language detection (still images)
+
+https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+
+This has to be downloaded in handTracker folder for the detector to work. Big file, dont want to push
