@@ -5,8 +5,11 @@ til bruk i klassifisering av ASL-bokstaver.
 
 ## Oppsett
 
-Last ned modellfilen og legg den i arbeidsmappen:
+Installer avhengighetene med `uv sync` fra repo-roten (se [README](../README.md)).
+Last ned modellfilen og legg den i `data/hand_landmarker.task` i repo-roten:
 https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+
+Modellbanen beregnes fra kildefilen og er uavhengig av arbeidsmappen.
 
 ## Bruk
 
