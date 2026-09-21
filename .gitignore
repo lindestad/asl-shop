@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Lokale data og modellfiler (les README)
+/data/*
+!/data/.gitkeep
+*.task
