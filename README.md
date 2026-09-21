@@ -30,6 +30,26 @@ Optional feature to design:
 
 - Sign language detection (still images)
 
-https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+### Oppsett
 
-This has to be downloaded in handTracker folder for the detector to work. Big file, dont want to push
+Installer Python 3.10 eller nyere og uv. Kjør fra repo-roten:
+
+```sh
+uv sync
+```
+
+Avhengigheter vedlikeholdes i `pyproject.toml`. Etter endringer, oppdater
+låsefilen og generer `requirements.txt` på nytt:
+
+```sh
+uv lock
+uv export --format requirements-txt --no-hashes --output-file requirements.txt
+```
+
+Alternativt kan avhengighetene installeres med `python -m pip install -r requirements.txt`.
+
+Last ned [Hand Landmarker-modellen](https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task)
+og lagre den som `data/hand_landmarker.task` i repo-roten. Modellfilen skal ikke sjekkes inn i Git.
+Modellbanen er uavhengig av hvilken mappe programmet startes fra.
+
+Start webkamerademoen fra repo-roten med `uv run python handTracker/hand_features.py`.

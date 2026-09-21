@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import cv2
 import numpy as np
 import mediapipe as mp
@@ -6,7 +8,8 @@ from mediapipe.tasks.python import vision
 from mediapipe.tasks.python.components.containers import landmark
 
 cap = cv2.VideoCapture(0)
-base_options = python.BaseOptions(model_asset_path='hand_landmarker.task')
+model_path = Path(__file__).resolve().parents[1] / 'data' / 'hand_landmarker.task'
+base_options = python.BaseOptions(model_asset_path=str(model_path))
 options = vision.HandLandmarkerOptions(base_options=base_options, num_hands=2)
 detector = vision.HandLandmarker.create_from_options(options)
 

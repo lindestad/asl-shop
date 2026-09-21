@@ -1,0 +1,14 @@
+[project]
+name = "asl-shop"
+version = "0.1.0"
+description = "Sign language image editor"
+requires-python = ">=3.10"
+dependencies = [
+    "mediapipe",
+    "numpy",
+    "opencv-contrib-python",
+    "pandas",
+]
+
+[tool.uv]
+package = false
