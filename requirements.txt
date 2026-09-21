@@ -24,7 +24,7 @@ matplotlib==3.10.9 ; python_full_version < '3.11'
     # via mediapipe
 matplotlib==3.11.2 ; python_full_version >= '3.11'
     # via mediapipe
-mediapipe==1.0.1
+mediapipe==0.10.35
     # via asl-shop
 numpy==2.2.6 ; python_full_version < '3.11'
     # via

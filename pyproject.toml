@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Sign language image editor"
 requires-python = ">=3.10"
 dependencies = [
-    "mediapipe",
+    "mediapipe<1.0",
     "numpy",
     "opencv-contrib-python",
     "pandas",
