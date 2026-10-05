@@ -8,9 +8,16 @@ from mediapipe.tasks.python import vision
 from mediapipe.tasks.python.components.containers import landmark
 
 model_path = Path(__file__).resolve().parents[1] / 'data' / 'hand_landmarker.task'
-base_options = python.BaseOptions(model_asset_path=str(model_path))
-options = vision.HandLandmarkerOptions(base_options=base_options, num_hands=2)
-detector = vision.HandLandmarker.create_from_options(options)
+
+def create_detector(num_hands=8, running_mode=vision.RunningMode.IMAGE):
+    return vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
+        base_options=python.BaseOptions(model_asset_path=str(model_path)),
+        num_hands=num_hands,
+        running_mode=running_mode,
+    ))
+
+
+detector = create_detector()
 
 def frameToMpImage(frame):
     rgbFrame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -25,9 +32,11 @@ def landmarks_to_features(hand, handedness_label, width, height):
     return pts.flatten()                           # vektor med 63 verdier
 
 
-def extractHands(frame, detector):
+def extractHands(frame, detector, timestamp_ms=None):
     height, width, _ = frame.shape # mp returnerer verdier mellom 0 og 1 og ikke koordinater
-    result = detector.detect(frameToMpImage(frame))
+    image = frameToMpImage(frame)
+    result = (detector.detect(image) if timestamp_ms is None
+              else detector.detect_for_video(image, timestamp_ms))
 
     hands = []
     for hand, handedness in zip(result.hand_landmarks, result.handedness):

@@ -1,0 +1,86 @@
+{
+  "name": "asl-shop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An image and sign language studio",
+  "author": "ASL Shop contributors",
+  "type": "module",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "start": "electron .",
+    "lint": "oxlint --deny-warnings frontend electron scripts/*.mjs tests",
+    "format": "oxfmt --write frontend electron scripts/*.mjs tests *.json *.ts index.html",
+    "format:check": "oxfmt --check frontend electron scripts/*.mjs tests *.json *.ts index.html",
+    "test": "playwright test",
+    "package": "npm run build && npm run build:backend && electron-builder --dir",
+    "dist": "npm run build && npm run build:backend && electron-builder",
+    "build:backend": "node scripts/build-backend.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "lucide-react": "^0.577.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.2"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "build": {
+    "appId": "no.aslshop.desktop",
+    "productName": "ASL Shop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "assets/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": ".build/backend/asl-recognition",
+        "to": "backend/asl-recognition"
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Graphics",
+      "syncDesktopName": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.graphics-design",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Use your camera to detect hand landmarks and capture images."
+      }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "icon": "assets/icon.png"
+  },
+  "desktopName": "asl-shop.desktop"
+}

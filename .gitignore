@@ -224,3 +224,11 @@ __marimo__/
 /data/*
 !/data/.gitkeep
 *.task
+
+# Frontend and desktop build artifacts
+node_modules/
+dist/
+release/
+test-results/
+playwright-report/
+.build/

@@ -32,15 +32,82 @@ Optional feature to design:
 
 ### Oppsett
 
+#### Electron-appen
+
+Kjør fra repo-roten på macOS eller Linux:
+
+```sh
+./setup.sh
+source data/setup-env.sh
+npm run dev
+```
+
+Grensesnittet bruker React og TypeScript, Vite 8 med Rolldown/Oxc,
+Oxlint og Oxfmt. `npm run dev` starter Vite og Electron sammen.
+`npm run dev:web` åpner kun nettleserversjonen; lokal hånddeteksjon og
+eksport til en mappe krever Electron.
+
+`setup.sh` installerer uv, Python og avhengighetene, Node.js 24 via
+[fnm](https://github.com/Schniz/fnm) hvis Node.js 22.12+ eller npm mangler,
+frontend-pakkene fra låsefilen, Electron og Chromium for testene. Det henter
+modellen og datasettet og bygger Python-adapteren for pakking med PyInstaller.
+En eksisterende kompatibel Node/npm-installasjon gjenbrukes. `data/setup-env.sh`
+gjør de installerte verktøyene tilgjengelige i terminalen uten å endre
+shellprofilen. npm-avhengighetene installeres på nytt fra låsefilen ved hver kjøring.
+
+- **Image editor:** åpne eller dra inn bilder, tegn, legg til former og tekst,
+  beskjær, endre størrelse, roter, speilvend, bruk filtre og eksporter PNG.
+- **Live camera:** spor opptil åtte hender, vis FPS og ta et bilde som åpnes i editoren.
+  Kameraet stoppes når du forlater kameravisningen.
+- **Batch studio:** analyser opptil 100 bilder og eksporter PNG-bilder med
+  landmarks og en `recognition.json`-rapport til en ny undermappe.
+
+Electron starter en vedvarende Python-prosess via
+`scripts/recognition_worker.py`. Den gjenbruker `handTracker/hand_features.py`
+og sender landmarks, 63 features og håndkonfidens gjennom en begrenset
+preload-API. Det brukes ingen HTTP-server for Python.
+Kameraet bruker MediaPipe VIDEO-modus med kapasitet tilpasset antallet synlige
+hender. En separat skanning hvert 250 ms finner nye hender, opptil åtte totalt.
+Bare ett kamerabilde analyseres om gangen; gamle bilder legges ikke i kø.
+FPS-visningen måler fullførte analyser, inkludert bildeoverføring.
+Bokstavklassifisering er fortsatt avhengig av modellen i
+[issue #7](https://github.com/lindestad/asl-shop/issues/7): `prediction` er
+`null` inntil den modellen kobles til. Grensesnittet viser dette eksplisitt.
+
+```sh
+npm run build       # TypeScript-sjekk og frontend-bygg
+npm run lint        # Oxlint
+npm run format      # Oxfmt
+npm test            # Editor-, kamera- og Electron-integrasjonstester
+npm run package     # Utpakket Electron-app i release/
+npm run dist        # AppImage, dmg eller Windows-installasjon
+```
+
+Pakkingen bygger først Python-adapteren med PyInstaller og inkluderer
+Python, avhengigheter og MediaPipe-modellen i appen. Sluttbrukeren trenger
+ikke Python eller uv. Treningsdatasettet pakkes ikke med.
+Bygg på operativsystemet og arkitekturen du skal distribuere til.
+Linux-bygget er verifisert lokalt; øvrige plattformer må testes på sine maskiner.
+Electron-testen bruker `data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg`
+fra datasettet som `setup.sh` henter.
+
+Test samme integrasjon mot en pakket Linux-app:
+
+```sh
+ASL_SHOP_TEST_APP=release/linux-unpacked/asl-shop npm test -- --project=desktop
+```
+
+#### Python og datasett
+
 Kjør fra repo-roten på macOS eller Linux:
 
 ```sh
 ./setup.sh
 ```
 
-Skriptet installerer [uv](https://docs.astral.sh/uv/getting-started/installation/)
-hvis det mangler, og setter opp Python 3.12 og prosjektavhengighetene i `.venv`.
-Deretter laster det ned MediaPipe-modellen og ASL Alphabet-datasettet til `data/`.
+Skriptet setter opp hele prosjektet som beskrevet over, inkludert
+Python 3.12 og prosjektavhengighetene i `.venv`, MediaPipe-modellen og
+ASL Alphabet-datasettet i `data/`.
 Det krever `curl` eller `wget`, men ikke en eksisterende Python-installasjon eller
 Kaggle-konto. Nedlastede data og modellfiler ignoreres av Git.
 Kjør samme kommando igjen hvis oppsettet avbrytes; ferdige nedlastinger hoppes over.

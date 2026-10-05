@@ -14,11 +14,11 @@ Modellbanen beregnes fra kildefilen og er uavhengig av arbeidsmappen.
 ## Bruk
 
 ```python
-from hand_features import create_detector, extract_hands
+from hand_features import create_detector, extractHands
 
 detector = create_detector()
 frame = cv2.flip(frame, 1)          # speilvend webkamerabildet først
-hands = extract_hands(frame, detector)
+hands = extractHands(frame, detector)
 ```
 
 `frame` må være et BGR-bilde fra OpenCV. Bildet må speilvendes før kallet,
@@ -26,7 +26,8 @@ ellers blir venstre/høyre-labelen motsatt.
 
 ## Returformat
 
-`extract_hands` returnerer en liste med én ordbok per hånd (0–2 elementer):
+`extractHands` returnerer en liste med én ordbok per hånd (0–8 elementer som standard).
+`create_detector(num_hands=...)` setter grensen.
 
 | Nøkkel      | Type                | Beskrivelse                                  |
 |-------------|---------------------|----------------------------------------------|
