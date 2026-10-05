@@ -8,6 +8,7 @@ dependencies = [
     "numpy",
     "opencv-contrib-python",
     "pandas",
+    "scikit-learn>=1.7.2",
 ]
 
 [tool.uv]

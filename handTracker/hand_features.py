@@ -7,7 +7,6 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from mediapipe.tasks.python.components.containers import landmark
 
-cap = cv2.VideoCapture(0)
 model_path = Path(__file__).resolve().parents[1] / 'data' / 'hand_landmarker.task'
 base_options = python.BaseOptions(model_asset_path=str(model_path))
 options = vision.HandLandmarkerOptions(base_options=base_options, num_hands=2)
@@ -42,7 +41,22 @@ def extractHands(frame, detector):
     return hands
 
 if __name__ == "__main__":
+    # overlay
+    overlay_path = Path(__file__).resolve().parents[1] / 'linux.png'
+    overlay = cv2.imread(str(overlay_path), cv2.IMREAD_UNCHANGED)  # beholder alfakanal
+    if overlay is None:
+        raise FileNotFoundError(overlay_path)
+    overlay = cv2.resize(overlay, (150, 150))
+    oh, ow, _ = overlay.shape
+    alpha = overlay[:, :, 3:] / 255.0              # 0 = gjennomsiktig, 1 = helt synlig
+    overlay_bgr = overlay[:, :, :3]
+
     cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FPS, 30)
+
+    x = 50
+    y = 50
+
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -59,6 +73,10 @@ if __name__ == "__main__":
                 px = int((1 - lm.x) * width)
                 py = int(lm.y * height)
                 cv2.circle(frame, (px,py), 5, (0, 255, 255), 2)
+
+        # set overlay on frame (after detection so it doesn't hide hands)
+        roi = frame[y:y+oh, x:x+ow]
+        frame[y:y+oh, x:x+ow] = (alpha * overlay_bgr + (1 - alpha) * roi).astype(np.uint8)
 
         cv2.imshow("Webcam feed", frame)
         # print(detectionResult)
