@@ -32,11 +32,20 @@ Optional feature to design:
 
 ### Oppsett
 
-Installer Python 3.10 eller nyere og uv. Kjør fra repo-roten:
+Kjør fra repo-roten på macOS eller Linux:
 
 ```sh
-uv sync
+./setup.sh
 ```
+
+Skriptet installerer [uv](https://docs.astral.sh/uv/getting-started/installation/)
+hvis det mangler, og setter opp Python 3.12 og prosjektavhengighetene i `.venv`.
+Deretter laster det ned MediaPipe-modellen og ASL Alphabet-datasettet til `data/`.
+Det krever `curl` eller `wget`, men ikke en eksisterende Python-installasjon eller
+Kaggle-konto. Nedlastede data og modellfiler ignoreres av Git.
+Kjør samme kommando igjen hvis oppsettet avbrytes; ferdige nedlastinger hoppes over.
+
+For å bare installere avhengighetene manuelt: `uv sync --python 3.12`.
 
 Avhengigheter vedlikeholdes i `pyproject.toml`. Etter endringer, oppdater
 låsefilen og generer `requirements.txt` på nytt:
@@ -53,3 +62,18 @@ og lagre den som `data/hand_landmarker.task` i repo-roten. Modellfilen skal ikke
 Modellbanen er uavhengig av hvilken mappe programmet startes fra.
 
 Start webkamerademoen fra repo-roten med `uv run python handTracker/hand_features.py`.
+
+### ASL Alphabet-datasett
+
+Last ned og pakk ut [ASL Alphabet fra Kaggle](https://www.kaggle.com/datasets/grassknoted/asl-alphabet):
+
+```sh
+uv run python scripts/download_dataset.py
+```
+
+Skriptet bruker bare Pythons standardbibliotek og krever ikke Kaggle-konto.
+Det lagrer arkivet (ca. 1 GB) og bildene i `data/`, med mappestrukturen fra
+Kaggle: `data/asl_alphabet_train/asl_alphabet_train/` og
+`data/asl_alphabet_test/asl_alphabet_test/`. Filene ignoreres av Git.
+Senere kjøringer hopper over et ferdig installert datasett. Hvis nedlasting
+eller utpakking avbrytes, kjør samme kommando igjen.
