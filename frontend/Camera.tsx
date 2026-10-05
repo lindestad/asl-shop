@@ -23,6 +23,7 @@ export default function CameraWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [size, setSize] = useState({ width: 1280, height: 720 });
   const [analyzing, setAnalyzing] = useState(false);
+  const [fps, setFps] = useState(0);
 
   function stop() {
     ++session.current;
@@ -33,6 +34,7 @@ export default function CameraWorkspace({
     setStarting(false);
     setAnalyzing(false);
     setResult(null);
+    setFps(0);
   }
   useEffect(() => {
     if (!active) stop();
@@ -83,38 +85,70 @@ export default function CameraWorkspace({
   }
   useEffect(() => {
     if (!running || !active || !window.desktop) return;
+    const element = video.current!;
     let canceled = false;
-    let timer: ReturnType<typeof setTimeout>;
+    let busy = false;
+    let frameReady = false;
+    let callback = 0;
+    let completedFrames = 0;
+    let sampleStarted = 0;
     const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d")!;
+    setAnalyzing(true);
     async function tick() {
-      if (canceled || !video.current?.videoWidth) return;
-      const ratio = 640 / video.current.videoWidth;
-      canvas.width = 640;
-      canvas.height = Math.round(video.current.videoHeight * ratio);
-      canvas.getContext("2d")!.drawImage(video.current, 0, 0, canvas.width, canvas.height);
-      setAnalyzing(true);
+      busy = true;
+      frameReady = false;
       try {
-        const recognition = await window.desktop!.recognize(canvas.toDataURL("image/jpeg", 0.85));
+        const width = Math.min(640, element.videoWidth);
+        const height = Math.round(element.videoHeight * (width / element.videoWidth));
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+        context.drawImage(element, 0, 0, width, height);
+        const recognition = await window.desktop!.recognizeFrame(
+          canvas.toDataURL("image/jpeg", 0.85),
+        );
         if (!canceled) {
           setResult(recognition);
           setError(null);
+          const now = performance.now();
+          if (!sampleStarted) sampleStarted = now;
+          else ++completedFrames;
+          if (now - sampleStarted >= 1000) {
+            setFps(Math.round((completedFrames * 1000) / (now - sampleStarted)));
+            completedFrames = 0;
+            sampleStarted = now;
+          }
         }
       } catch (reason) {
         if (!canceled) {
           setError((reason as Error).message);
           setAnalyzing(false);
-          return;
+          canceled = true;
+          element.cancelVideoFrameCallback(callback);
         }
-      }
-      if (!canceled) {
-        setAnalyzing(false);
-        timer = setTimeout(() => void tick(), 180);
+      } finally {
+        busy = false;
+        // A newer frame may have arrived during inference. Read its current
+        // pixels immediately instead of waiting for another camera interval.
+        if (!canceled && frameReady) void tick();
       }
     }
-    void tick();
+    function schedule() {
+      callback = element.requestVideoFrameCallback(() => {
+        if (canceled) return;
+        schedule();
+        // Keep only the newest frame. Never queue stale frames behind inference.
+        frameReady = true;
+        if (!busy && element.videoWidth) void tick();
+      });
+    }
+    schedule();
     return () => {
       canceled = true;
-      clearTimeout(timer);
+      element.cancelVideoFrameCallback(callback);
+      setAnalyzing(false);
     };
   }, [running, active]);
   function capture() {
@@ -145,6 +179,11 @@ export default function CameraWorkspace({
             {running && (
               <span className="small-tag">
                 {size.width} × {size.height}
+              </span>
+            )}
+            {running && fps > 0 && (
+              <span className="small-tag" aria-label="Tracking frame rate">
+                {fps} FPS
               </span>
             )}
           </div>

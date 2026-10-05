@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld("desktop", {
   saveImage: (image) => ipcRenderer.invoke("images:save", image),
   saveBatch: (images) => ipcRenderer.invoke("images:save-batch", images),
   recognize: (dataUrl) => ipcRenderer.invoke("recognition:analyze", dataUrl),
+  recognizeFrame: (dataUrl) => ipcRenderer.invoke("recognition:frame", dataUrl),
 });

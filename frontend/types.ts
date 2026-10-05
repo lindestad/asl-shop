@@ -20,6 +20,7 @@ export interface DesktopBridge {
   saveImage: (image: SourceImage) => Promise<string | null>;
   saveBatch: (images: BatchExport[]) => Promise<string | null>;
   recognize: (dataUrl: string) => Promise<Recognition>;
+  recognizeFrame: (dataUrl: string) => Promise<Recognition>;
 }
 declare global {
   interface Window {

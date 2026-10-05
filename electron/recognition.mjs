@@ -79,7 +79,7 @@ export class RecognitionService {
     });
   }
 
-  analyze(dataUrl) {
+  analyze(dataUrl, video = false) {
     if (
       typeof dataUrl !== "string" ||
       dataUrl.length > 24 * 1024 * 1024 ||
@@ -96,7 +96,7 @@ export class RecognitionService {
         this.stop(new Error("Hand detection timed out. Try again with a smaller image."));
       }, 60000);
       this.#pending.set(id, { resolve, reject, timer });
-      this.#child.stdin.write(JSON.stringify({ id, dataUrl }) + "\n");
+      this.#child.stdin.write(JSON.stringify({ id, dataUrl, video }) + "\n");
     });
   }
 

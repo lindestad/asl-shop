@@ -57,7 +57,7 @@ shellprofilen. npm-avhengighetene installeres på nytt fra låsefilen ved hver k
 
 - **Image editor:** åpne eller dra inn bilder, tegn, legg til former og tekst,
   beskjær, endre størrelse, roter, speilvend, bruk filtre og eksporter PNG.
-- **Live camera:** vis håndlandmarks og ta et bilde som åpnes i editoren.
+- **Live camera:** spor opptil åtte hender, vis FPS og ta et bilde som åpnes i editoren.
   Kameraet stoppes når du forlater kameravisningen.
 - **Batch studio:** analyser opptil 100 bilder og eksporter PNG-bilder med
   landmarks og en `recognition.json`-rapport til en ny undermappe.
@@ -66,6 +66,10 @@ Electron starter en vedvarende Python-prosess via
 `scripts/recognition_worker.py`. Den gjenbruker `handTracker/hand_features.py`
 og sender landmarks, 63 features og håndkonfidens gjennom en begrenset
 preload-API. Det brukes ingen HTTP-server for Python.
+Kameraet bruker MediaPipe VIDEO-modus med kapasitet tilpasset antallet synlige
+hender. En separat skanning hvert 250 ms finner nye hender, opptil åtte totalt.
+Bare ett kamerabilde analyseres om gangen; gamle bilder legges ikke i kø.
+FPS-visningen måler fullførte analyser, inkludert bildeoverføring.
 Bokstavklassifisering er fortsatt avhengig av modellen i
 [issue #7](https://github.com/lindestad/asl-shop/issues/7): `prediction` er
 `null` inntil den modellen kobles til. Grensesnittet viser dette eksplisitt.

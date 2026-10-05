@@ -104,6 +104,7 @@ handle("images:save-batch", async (images) => {
   return output;
 });
 handle("recognition:analyze", (dataUrl) => recognition.analyze(dataUrl));
+handle("recognition:frame", (dataUrl) => recognition.analyze(dataUrl, true));
 
 async function createWindow() {
   window = new BrowserWindow({
