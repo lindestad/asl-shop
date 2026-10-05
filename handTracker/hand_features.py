@@ -47,14 +47,16 @@ if __name__ == "__main__":
         ret, frame = cap.read()
         if not ret:
             break
-
-        frame = cv2.flip(frame, 1)
+        
         height, width, _ = frame.shape # mp returnerer verdier mellom 0 og 1 og ikke koordinater
-
-        for h in extractHands(frame, detector):
+        
+        hands = extractHands(frame, detector)
+        frame = cv2.flip(frame, 1)
+        
+        for h in hands:
             print(h["hand"], h["features"].shape)
             for lm in h["landmarks"]:
-                px = int(lm.x * width)
+                px = int((1 - lm.x) * width)
                 py = int(lm.y * height)
                 cv2.circle(frame, (px,py), 5, (0, 255, 255), 2)
 
