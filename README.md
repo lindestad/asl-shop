@@ -32,6 +32,62 @@ Optional feature to design:
 
 ### Oppsett
 
+#### Electron-appen
+
+Installer Node.js 22.12 eller nyere, og kjør fra repo-roten:
+
+```sh
+./setup.sh
+npm ci
+npm run dev
+```
+
+Grensesnittet bruker React og TypeScript, Vite 8 med Rolldown/Oxc,
+Oxlint og Oxfmt. `npm run dev` starter Vite og Electron sammen.
+`npm run dev:web` åpner kun nettleserversjonen; lokal hånddeteksjon og
+eksport til en mappe krever Electron.
+
+- **Image editor:** åpne eller dra inn bilder, tegn, legg til former og tekst,
+  beskjær, endre størrelse, roter, speilvend, bruk filtre og eksporter PNG.
+- **Live camera:** vis håndlandmarks og ta et bilde som åpnes i editoren.
+  Kameraet stoppes når du forlater kameravisningen.
+- **Batch studio:** analyser opptil 100 bilder og eksporter PNG-bilder med
+  landmarks og en `recognition.json`-rapport til en ny undermappe.
+
+Electron starter en vedvarende Python-prosess via
+`scripts/recognition_worker.py`. Den gjenbruker `handTracker/hand_features.py`
+og sender landmarks, 63 features og håndkonfidens gjennom en begrenset
+preload-API. Det brukes ingen HTTP-server for Python.
+Bokstavklassifisering er fortsatt avhengig av modellen i
+[issue #7](https://github.com/lindestad/asl-shop/issues/7): `prediction` er
+`null` inntil den modellen kobles til. Grensesnittet viser dette eksplisitt.
+
+```sh
+npm run build       # TypeScript-sjekk og frontend-bygg
+npm run lint        # Oxlint
+npm run format      # Oxfmt
+npx playwright install chromium
+npm test            # Editor-, kamera- og Electron-integrasjonstester
+npm run package     # Utpakket Electron-app i release/
+npm run dist        # AppImage, dmg eller Windows-installasjon
+```
+
+Pakkingen bygger først Python-adapteren med PyInstaller og inkluderer
+Python, avhengigheter og MediaPipe-modellen i appen. Sluttbrukeren trenger
+ikke Python eller uv. Treningsdatasettet pakkes ikke med.
+Bygg på operativsystemet og arkitekturen du skal distribuere til.
+Linux-bygget er verifisert lokalt; øvrige plattformer må testes på sine maskiner.
+Electron-testen bruker `data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg`
+fra datasettet som `setup.sh` henter.
+
+Test samme integrasjon mot en pakket Linux-app:
+
+```sh
+ASL_SHOP_TEST_APP=release/linux-unpacked/asl-shop npm test -- --project=desktop
+```
+
+#### Python og datasett
+
 Kjør fra repo-roten på macOS eller Linux:
 
 ```sh
