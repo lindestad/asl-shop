@@ -34,11 +34,11 @@ Optional feature to design:
 
 #### Electron-appen
 
-Installer Node.js 22.12 eller nyere, og kjør fra repo-roten:
+Kjør fra repo-roten på macOS eller Linux:
 
 ```sh
 ./setup.sh
-npm ci
+source data/setup-env.sh
 npm run dev
 ```
 
@@ -46,6 +46,14 @@ Grensesnittet bruker React og TypeScript, Vite 8 med Rolldown/Oxc,
 Oxlint og Oxfmt. `npm run dev` starter Vite og Electron sammen.
 `npm run dev:web` åpner kun nettleserversjonen; lokal hånddeteksjon og
 eksport til en mappe krever Electron.
+
+`setup.sh` installerer uv, Python og avhengighetene, Node.js 24 via
+[fnm](https://github.com/Schniz/fnm) hvis Node.js 22.12+ eller npm mangler,
+frontend-pakkene fra låsefilen, Electron og Chromium for testene. Det henter
+modellen og datasettet og bygger Python-adapteren for pakking med PyInstaller.
+En eksisterende kompatibel Node/npm-installasjon gjenbrukes. `data/setup-env.sh`
+gjør de installerte verktøyene tilgjengelige i terminalen uten å endre
+shellprofilen. npm-avhengighetene installeres på nytt fra låsefilen ved hver kjøring.
 
 - **Image editor:** åpne eller dra inn bilder, tegn, legg til former og tekst,
   beskjær, endre størrelse, roter, speilvend, bruk filtre og eksporter PNG.
@@ -66,7 +74,6 @@ Bokstavklassifisering er fortsatt avhengig av modellen i
 npm run build       # TypeScript-sjekk og frontend-bygg
 npm run lint        # Oxlint
 npm run format      # Oxfmt
-npx playwright install chromium
 npm test            # Editor-, kamera- og Electron-integrasjonstester
 npm run package     # Utpakket Electron-app i release/
 npm run dist        # AppImage, dmg eller Windows-installasjon
@@ -94,9 +101,9 @@ Kjør fra repo-roten på macOS eller Linux:
 ./setup.sh
 ```
 
-Skriptet installerer [uv](https://docs.astral.sh/uv/getting-started/installation/)
-hvis det mangler, og setter opp Python 3.12 og prosjektavhengighetene i `.venv`.
-Deretter laster det ned MediaPipe-modellen og ASL Alphabet-datasettet til `data/`.
+Skriptet setter opp hele prosjektet som beskrevet over, inkludert
+Python 3.12 og prosjektavhengighetene i `.venv`, MediaPipe-modellen og
+ASL Alphabet-datasettet i `data/`.
 Det krever `curl` eller `wget`, men ikke en eksisterende Python-installasjon eller
 Kaggle-konto. Nedlastede data og modellfiler ignoreres av Git.
 Kjør samme kommando igjen hvis oppsettet avbrytes; ferdige nedlastinger hoppes over.
