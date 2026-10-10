@@ -6,14 +6,18 @@ Stdout is reserved for protocol messages. MediaPipe diagnostics go to stderr.
 import base64
 import json
 from pathlib import Path
+import pickle
 import sys
 import time
+import warnings
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(ROOT))
-CLASSIFIER_PATH = ROOT / "model" / "asl_knn.npz"
-FEATURE_SCHEMA = "wrist_relative_mirrored_scaled_63_v1"
+CLASSIFIER_PATH = ROOT / "model" / "knn.pkl"
 classifier = None
+
+# The model was fitted on a DataFrame; we predict on plain arrays in the same column order.
+warnings.filterwarnings("ignore", message="X does not have valid feature names")
 
 
 video_detector = None
@@ -25,18 +29,10 @@ video_capacity = 0
 def get_classifier():
     global classifier
     if classifier is None and CLASSIFIER_PATH.exists():
-        import numpy as np
-
-        with np.load(CLASSIFIER_PATH, allow_pickle=False) as saved:
-            features = saved["features"]
-            labels = saved["labels"]
-            neighbors = int(saved["neighbors"])
-            schema = str(saved["schema"])
-        if schema != FEATURE_SCHEMA or features.ndim != 2 or features.shape[1] != 63:
+        with open(CLASSIFIER_PATH, "rb") as f:
+            classifier = pickle.load(f)
+        if classifier.n_features_in_ != 63:
             raise ValueError("The ASL classifier uses an incompatible feature format.")
-        if len(features) != len(labels) or not 1 <= neighbors <= len(features):
-            raise ValueError("The ASL classifier file is incomplete.")
-        classifier = (features, labels, neighbors)
     return classifier
 
 
@@ -45,16 +41,13 @@ def predict_letter(hands, model):
         return None
     import numpy as np
 
-    features, labels, neighbors = model
     hand = max(hands, key=lambda item: item["score"])
-    delta = features - hand["features"].astype(np.float32)
-    distances = np.einsum("ij,ij->i", delta, delta)
-    closest = np.argpartition(distances, neighbors - 1)[:neighbors]
-    letters, counts = np.unique(labels[closest], return_counts=True)
-    winner = int(np.argmax(counts))
-    if counts[winner] < 3:
+    probabilities = model.predict_proba(hand["features"].reshape(1, -1))[0]
+    winner = int(np.argmax(probabilities))
+    # Require a clear majority of neighbours (3 of 5 with the default k).
+    if probabilities[winner] < 0.6:
         return None
-    return {"letter": str(letters[winner]), "confidence": float(counts[winner] / neighbors)}
+    return {"letter": str(model.classes_[winner]), "confidence": float(probabilities[winner])}
 
 
 def track(frame):

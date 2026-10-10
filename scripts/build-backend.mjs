@@ -7,7 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const model = path.join(root, "data", "hand_landmarker.task");
 if (!existsSync(model))
   throw new Error("Run ./setup.sh to download the MediaPipe model before packaging.");
-const classifier = path.join(root, "model", "asl_knn.npz");
+const classifier = path.join(root, "model", "knn.pkl");
 if (!existsSync(classifier))
   throw new Error("Run uv run python model/knn.py to train the ASL classifier before packaging.");
 const child = spawn(
@@ -40,6 +40,8 @@ const child = spawn(
     "mediapipe",
     "--hidden-import",
     "handTracker.hand_features",
+    "--collect-submodules",
+    "sklearn.neighbors",
     "scripts/recognition_worker.py",
   ],
   { cwd: root, stdio: "inherit" },
