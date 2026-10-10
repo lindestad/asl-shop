@@ -22,5 +22,5 @@ y_pred = knn.predict(X_test)
 print(f"Test Accuracy (k=5): {accuracy_score(y_test, y_pred):.2f}")
 
 # Save model with pickle
-with open("knn.pkl", "wb") as f:
+with open("model/knn.pkl", "wb") as f:
     pickle.dump(knn, f)
