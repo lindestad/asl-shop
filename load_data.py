@@ -7,7 +7,10 @@ data_path = Path(__file__).resolve().parent / 'data'
 train_path = data_path / 'asl_alphabet_train' / 'asl_alphabet_train'
 test_path = data_path / 'asl_alphabet_test' / 'asl_alphabet_test'
 
+header = ["label"] + [f"{axis}{i}" for i in range(21) for axis in "xyz"]
+
 with open("extactedLandmarks.csv", "w", encoding="utf-8") as file:
+    file.write(",".join(header) + "\n")
     for class_dir in train_path.iterdir():
         label = class_dir.name
         for img_path in class_dir.glob('*.jpg'):
