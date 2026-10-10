@@ -7,6 +7,7 @@ dependencies = [
     "mediapipe<1.0",
     "numpy",
     "opencv-contrib-python",
+    "opencv-python>=5.0.0.93",
     "pandas",
     "scikit-learn>=1.7.2",
 ]
