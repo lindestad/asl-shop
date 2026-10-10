@@ -5,7 +5,7 @@ import pandas as pd
 import pickle 
 
 # load data
-df = pd.read_csv("data/mock_asl_landmarks.csv").drop(columns="person")
+df = pd.read_csv("data/extracted_landmarks.csv")
 
 X = df.drop(columns="label")
 y = df["label"]
