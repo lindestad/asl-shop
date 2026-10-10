@@ -1,40 +1,20 @@
-# asl-shop
+# ASL Shop
 
-Machine vision project IKT213: Sign language image editor
+En Electron-app for gjenkjenning av ASL-bokstaver fra live kamera eller ett bilde.
+Appen har to visninger: **Live kamera** og **Bilde**. Bilder og kamerarammer analyseres
+lokalt av en Python-prosess med MediaPipe Hand Landmarker.
 
-## Course project (text from Canvas)
+**Bokstavmodell:** En KNN-modell er trent på 2 400 bilder der MediaPipe fant en hånd.
+Den bruker de samme 63 normaliserte håndkoordinatene som kamera- og bildeanalysen.
+Modellen ligger i `model/asl_knn.npz` og er inkludert i den pakkede appen. Visningen
+oppgir hvor mange av de fem nærmeste treningseksemplene som støtter bokstaven;
+det er ikke en kalibrert sannsynlighet. Ved færre enn tre stemmer vises ingen bokstav.
+J og Z er bevegelsestegn i ASL, så en modell som bare ser ett bilde om gangen kan
+ikke gjenkjenne hele bevegelsen.
 
-Project goals Design and implement a photo editing desktop application or a web application or a mobile application that has the following minimum functionalities:
+## Kom i gang
 
-1. File menu with the following options: New, Open, Save, Save as, Properties, Quit
-
-2. Clipboard menu with the following options: Copy, Paste, Cut
-
-3. Image menu with the following options: Select --> rectangular selection, free-form selection (Lasso), Polygon selection; Crop, Resize, Rotate --> rotate right 90 degrees, Rotate Left 90 degrees, Flip vertical, Flip horizontal;
-
-4. Tools menu with following options: Zoom (Zoom In, Zoom Out), Erase, Color Picker, Paint brushes (with different textures/patterns), Text box, Filters --> Gaussian filter, Sobel filter, Binary filter; Histogram thresholding
-
-5. Shapes menu with the following options: List of Shapes, Outline color, Fill color
-
-6. Colors menu with the following options: Color pallet, Size of brush
-
-Optional feature to design:
-
-1. Layer menu with following option: New Layer, Load layer, Edit layer, Select layer, Delete layer, Rename layer
-
-2. Snapchat/Zoom filters option :)
-
----
-
-### Additions beyond mvp
-
-- Sign language detection (still images)
-
-### Oppsett
-
-#### Electron-appen
-
-Kjør fra repo-roten på macOS eller Linux:
+På macOS eller Linux, fra repo-roten:
 
 ```sh
 ./setup.sh
@@ -42,105 +22,59 @@ source data/setup-env.sh
 npm run dev
 ```
 
-Grensesnittet bruker React og TypeScript, Vite 8 med Rolldown/Oxc,
-Oxlint og Oxfmt. `npm run dev` starter Vite og Electron sammen.
-`npm run dev:web` åpner kun nettleserversjonen; lokal hånddeteksjon og
-eksport til en mappe krever Electron.
+`npm run dev` starter Vite og Electron. Frontend-kode oppdateres av Vite; endringer i
+`electron/` starter Electron-prosessen på nytt. `npm run dev:web` viser bare
+grensesnittet i nettleser, uten lokal gjenkjenning.
 
-`setup.sh` installerer uv, Python og avhengighetene, Node.js 24 via
-[fnm](https://github.com/Schniz/fnm) hvis Node.js 22.12+ eller npm mangler,
-frontend-pakkene fra låsefilen, Electron og Chromium for testene. Det henter
-modellen og datasettet og bygger Python-adapteren for pakking med PyInstaller.
-En eksisterende kompatibel Node/npm-installasjon gjenbrukes. `data/setup-env.sh`
-gjør de installerte verktøyene tilgjengelige i terminalen uten å endre
-shellprofilen. npm-avhengighetene installeres på nytt fra låsefilen ved hver kjøring.
-
-- **Image editor:** åpne eller dra inn bilder, tegn, legg til former og tekst,
-  beskjær, endre størrelse, roter, speilvend, bruk filtre og eksporter PNG.
-- **Live camera:** spor opptil åtte hender, vis FPS og ta et bilde som åpnes i editoren.
-  Kameraet stoppes når du forlater kameravisningen.
-- **Batch studio:** analyser opptil 100 bilder og eksporter PNG-bilder med
-  landmarks og en `recognition.json`-rapport til en ny undermappe.
-
-Electron starter en vedvarende Python-prosess via
-`scripts/recognition_worker.py`. Den gjenbruker `handTracker/hand_features.py`
-og sender landmarks, 63 features og håndkonfidens gjennom en begrenset
-preload-API. Det brukes ingen HTTP-server for Python.
-Kameraet bruker MediaPipe VIDEO-modus med kapasitet tilpasset antallet synlige
-hender. En separat skanning hvert 250 ms finner nye hender, opptil åtte totalt.
-Bare ett kamerabilde analyseres om gangen; gamle bilder legges ikke i kø.
-FPS-visningen måler fullførte analyser, inkludert bildeoverføring.
-Bokstavklassifisering er fortsatt avhengig av modellen i
-[issue #7](https://github.com/lindestad/asl-shop/issues/7): `prediction` er
-`null` inntil den modellen kobles til. Grensesnittet viser dette eksplisitt.
-
-```sh
-npm run build       # TypeScript-sjekk og frontend-bygg
-npm run lint        # Oxlint
-npm run format      # Oxfmt
-npm test            # Editor-, kamera- og Electron-integrasjonstester
-npm run package     # Utpakket Electron-app i release/
-npm run dist        # AppImage, dmg eller Windows-installasjon
-```
-
-Pakkingen bygger først Python-adapteren med PyInstaller og inkluderer
-Python, avhengigheter og MediaPipe-modellen i appen. Sluttbrukeren trenger
-ikke Python eller uv. Treningsdatasettet pakkes ikke med.
-Bygg på operativsystemet og arkitekturen du skal distribuere til.
-Linux-bygget er verifisert lokalt; øvrige plattformer må testes på sine maskiner.
-Electron-testen bruker `data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg`
-fra datasettet som `setup.sh` henter.
-
-Test samme integrasjon mot en pakket Linux-app:
-
-```sh
-ASL_SHOP_TEST_APP=release/linux-unpacked/asl-shop npm test -- --project=desktop
-```
-
-#### Python og datasett
-
-Kjør fra repo-roten på macOS eller Linux:
-
-```sh
-./setup.sh
-```
-
-Skriptet setter opp hele prosjektet som beskrevet over, inkludert
-Python 3.12 og prosjektavhengighetene i `.venv`, MediaPipe-modellen og
-ASL Alphabet-datasettet i `data/`.
-Det krever `curl` eller `wget`, men ikke en eksisterende Python-installasjon eller
-Kaggle-konto. Nedlastede data og modellfiler ignoreres av Git.
-Kjør samme kommando igjen hvis oppsettet avbrytes; ferdige nedlastinger hoppes over.
-
-For å bare installere avhengighetene manuelt: `uv sync --python 3.12`.
-
-Avhengigheter vedlikeholdes i `pyproject.toml`. Etter endringer, oppdater
-låsefilen og generer `requirements.txt` på nytt:
-
-```sh
-uv lock
-uv export --format requirements-txt --no-hashes --output-file requirements.txt
-```
-
-Alternativt kan avhengighetene installeres med `python -m pip install -r requirements.txt`.
-
-Last ned [Hand Landmarker-modellen](https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task)
-og lagre den som `data/hand_landmarker.task` i repo-roten. Modellfilen skal ikke sjekkes inn i Git.
-Modellbanen er uavhengig av hvilken mappe programmet startes fra.
-
-Start webkamerademoen fra repo-roten med `uv run python handTracker/hand_features.py`.
-
-### ASL Alphabet-datasett
-
-Last ned og pakk ut [ASL Alphabet fra Kaggle](https://www.kaggle.com/datasets/grassknoted/asl-alphabet):
+`setup.sh` installerer prosjektets Node- og Python-avhengigheter og MediaPipe-modellen.
+ASL-datasettet trengs ikke for å kjøre appen, siden den trente modellen følger med.
+Last ned datasettet separat for å trene modellen på nytt eller kjøre integrasjonstesten:
 
 ```sh
 uv run python scripts/download_dataset.py
+uv run python model/knn.py --samples-per-class 120
 ```
 
-Skriptet bruker bare Pythons standardbibliotek og krever ikke Kaggle-konto.
-Det lagrer arkivet (ca. 1 GB) og bildene i `data/`, med mappestrukturen fra
-Kaggle: `data/asl_alphabet_train/asl_alphabet_train/` og
-`data/asl_alphabet_test/asl_alphabet_test/`. Filene ignoreres av Git.
-Senere kjøringer hopper over et ferdig installert datasett. Hvis nedlasting
-eller utpakking avbrytes, kjør samme kommando igjen.
+Treningsskriptet henter landemerker med samme kode som appen og lagrer en ny
+`model/asl_knn.npz`. Det faste utvalget styres av `--seed 42`. På de separate
+testbildene ble 13 av 26 bokstavbilder registrert som hender, og alle de 13 ble
+klassifisert riktig. Dette er et lite testsett og sier lite om hvor godt modellen
+virker på nye personer, bakgrunner og lysforhold.
+
+## Struktur
+
+- `frontend/`: React-visningene for kamera og bilde.
+- `electron/main.mjs`: vindu, lokale kamera­tillatelser og validerte IPC-kall.
+- `electron/preload.cjs`: begrenset API for bildevalg og gjenkjenning.
+- `electron/recognition.mjs`: styrer den lokale Python-prosessen.
+- `scripts/recognition_worker.py`: hånddeteksjon og bokstavklassifisering.
+- `model/knn.py`: trening og enkel evaluering av bokstavmodellen.
+- `handTracker/`: MediaPipe-hjelpere som brukes av worker-prosessen.
+
+Renderer-prosessen er sandboxed, har context isolation og ingen Node-integrasjon.
+Den pakkede frontend-en lastes gjennom en begrenset `app://`-protokoll.
+
+## Sjekk og bygg
+
+```sh
+npm run build
+npm run lint
+npm test
+npm run package
+```
+
+`npm run package` bygger frontend og Python-backend, og lager en utpakket app i
+`release/`. `npm run dist` lager installasjonsformatet for plattformen som kjøres.
+Python, MediaPipe, håndmodellen og bokstavmodellen følger med i den pakkede appen; ASL-datasettet
+gjør det ikke. Bygg på operativsystemet og arkitekturen du vil distribuere til.
+
+Pakkingen bruker `electron-builder`. [Electrons pakkeveiledning](https://www.electronjs.org/docs/latest/tutorial/tutorial-packaging)
+anbefaler Forge, mens [oversikten over alternativer](https://www.electronjs.org/docs/latest/tutorial/forge-overview)
+omtaler `electron-builder` som et tredjepartsvalg uten offisiell støtte fra
+Electron-prosjektet. Selve Electron-integrasjonen følger
+[sikkerhetsveiledningen](https://www.electronjs.org/docs/latest/tutorial/security/)
+for preload, context isolation, sandboxing, IPC-validering, tillatelser og lokal protokoll.
+
+Desktop-integrasjonstesten bruker
+`data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg` fra det separate datasettet.
+Last ned datasettet før du kjører den testen.
