@@ -1,7 +1,7 @@
 [project]
 name = "asl-shop"
 version = "0.1.0"
-description = "Sign language image editor"
+description = "ASL letter recognition desktop app"
 requires-python = ">=3.10"
 dependencies = [
     "mediapipe<1.0",
