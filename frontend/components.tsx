@@ -44,14 +44,16 @@ export function RecognitionSummary({ result }: { result: Recognition | null }) {
       {result?.prediction ? (
         <>
           <strong className="result-letter">{result.prediction.letter}</strong>
-          <p>{Math.round(result.prediction.confidence * 100)} % sikkerhet</p>
+          <p>{Math.round(result.prediction.confidence * 5)} av 5 nærmeste treningseksempler</p>
         </>
       ) : (
         <>
           <strong className="result-placeholder">Ingen bokstav ennå</strong>
           <p>
             {result?.hands.length
-              ? "Hånd funnet. Bokstavmodellen er ikke koblet til ennå."
+              ? result.classifierAvailable
+                ? "Hånd funnet, men ingen tydelig bokstav. Prøv en annen vinkel."
+                : "Hånd funnet. Bokstavmodellen er ikke tilgjengelig."
               : result
                 ? "Ingen hånd funnet. Prøv tydeligere lys og vis hele hånden."
                 : "Resultatet vises her når analysen starter."}

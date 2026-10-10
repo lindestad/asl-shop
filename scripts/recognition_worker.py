@@ -1,7 +1,6 @@
-"""Persistent newline-delimited JSON adapter for the existing hand detector.
+"""Persistent newline-delimited JSON adapter for hand and letter recognition.
 
 Stdout is reserved for protocol messages. MediaPipe diagnostics go to stderr.
-Letter prediction is intentionally null until the classifier in issue #7 exists.
 """
 
 import base64
@@ -12,12 +11,50 @@ import time
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(ROOT))
+CLASSIFIER_PATH = ROOT / "model" / "asl_knn.npz"
+FEATURE_SCHEMA = "wrist_relative_mirrored_scaled_63_v1"
+classifier = None
 
 
 video_detector = None
 video_timestamp = -1
 video_scan_timestamp = -1
 video_capacity = 0
+
+
+def get_classifier():
+    global classifier
+    if classifier is None and CLASSIFIER_PATH.exists():
+        import numpy as np
+
+        with np.load(CLASSIFIER_PATH, allow_pickle=False) as saved:
+            features = saved["features"]
+            labels = saved["labels"]
+            neighbors = int(saved["neighbors"])
+            schema = str(saved["schema"])
+        if schema != FEATURE_SCHEMA or features.ndim != 2 or features.shape[1] != 63:
+            raise ValueError("The ASL classifier uses an incompatible feature format.")
+        if len(features) != len(labels) or not 1 <= neighbors <= len(features):
+            raise ValueError("The ASL classifier file is incomplete.")
+        classifier = (features, labels, neighbors)
+    return classifier
+
+
+def predict_letter(hands, model):
+    if not hands or model is None:
+        return None
+    import numpy as np
+
+    features, labels, neighbors = model
+    hand = max(hands, key=lambda item: item["score"])
+    delta = features - hand["features"].astype(np.float32)
+    distances = np.einsum("ij,ij->i", delta, delta)
+    closest = np.argpartition(distances, neighbors - 1)[:neighbors]
+    letters, counts = np.unique(labels[closest], return_counts=True)
+    winner = int(np.argmax(counts))
+    if counts[winner] < 3:
+        return None
+    return {"letter": str(letters[winner]), "confidence": float(counts[winner] / neighbors)}
 
 
 def track(frame):
@@ -63,11 +100,12 @@ def analyze(data_url, video=False):
         hands = track(frame)
     else:
         hands = extractHands(frame, detector)
+    model = get_classifier()
     return {
         "width": width,
         "height": height,
-        "classifierAvailable": False,
-        "prediction": None,
+        "classifierAvailable": model is not None,
+        "prediction": predict_letter(hands, model),
         "hands": [
             {"hand": hand["hand"], "score": float(hand["score"]),
              "features": hand["features"].tolist(),
