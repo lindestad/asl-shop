@@ -1,23 +1,3 @@
-"""
-Tren og sammenlign classifiers på landmark datasettet.
-
-Leser data/landmarks.npz, evaluerer flere modeller,
-skriver ut nøyaktighet, klasserapport og forvekslingsmatrise for den beste,
-og lagrer den beste modellen (trent på alle data) til data/asl_classifier.joblib
-som en ordbok {"model": ..., "labels": [...]}.
-
-Kjør fra repo root:
-    uv run python -m handTracker.train_classifier
-    uv run python -m handTracker.train_classifier --models knn rf     # utvalg
-    uv run python -m handTracker.train_classifier --split random
-
-Splitting:
-    block   (standard) siste 20 % av bildenumrene per bokstav er test. Bildene i
-            Kaggle-settet er fortløpende bilder av samme hånd, så en tilfeldig
-            splitt gir nesten-duplikater i testsettet og for høy nøyaktighet.
-    random  vanlig stratifisert tilfeldig splitt, for sammenligning.
-"""
-
 import argparse
 from pathlib import Path
 import time

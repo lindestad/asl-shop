@@ -1,18 +1,3 @@
-"""
-Bygg et landmark datasett fra Kaggle ASL Alphabet bildene.
-
-Kjører MediaPipe på hvert treningsbilde, tar ut 63-verdiers featurevektor og lagrer alt i data/landmarks.npz:
-
-Forutsetninger:
-- uv run python scripts/download_dataset.py
-- data/hand_landmarker.task
-
-Kjør:
-- uv run python -m handTracker.build_dataset
-- uv run python -m handTracker.build_dataset --limit 200   # rask test
-
-"""
-
 import argparse
 from collections import Counter
 from pathlib import Path
