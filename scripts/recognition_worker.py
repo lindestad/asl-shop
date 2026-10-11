@@ -9,16 +9,11 @@ from pathlib import Path
 import pickle
 import sys
 import time
-import warnings
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(ROOT))
-CLASSIFIER_PATH = ROOT / "model" / "knn.pkl"
+CLASSIFIER_PATH = ROOT / "data" / "knn.pkl"
 classifier = None
-
-# The model was fitted on a DataFrame; we predict on plain arrays in the same column order.
-warnings.filterwarnings("ignore", message="X does not have valid feature names")
-
 
 video_detector = None
 video_timestamp = -1

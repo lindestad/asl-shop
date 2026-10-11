@@ -3,6 +3,26 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+declare global {
+  interface Window {
+    cameraTest: {
+      multiple: boolean;
+      tracks: MediaStreamTrack[];
+    };
+  }
+}
+
+test.beforeEach(() => {
+  const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
+  test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration tests.");
+  if (!process.env.ASL_SHOP_TEST_APP) {
+    expect(
+      existsSync(path.resolve("data/knn.pkl")),
+      "Train the classifier with model/knn.py first.",
+    ).toBe(true);
+  }
+});
+
 test("Electron recognizes a letter from an image with the trained model", async () => {
   const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
   test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration test.");
@@ -33,7 +53,7 @@ test("Electron recognizes a letter from an image with the trained model", async 
   }
 });
 
-test("live camera frames use the trained letter model", async () => {
+test("camera recognizes letters, keeps up with video, finds new hands, and restarts", async () => {
   const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
   test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration test.");
   const application = await electron.launch({
@@ -50,22 +70,96 @@ test("live camera frames use the trained letter model", async () => {
       image.src = `data:image/jpeg;base64,${encoded}`;
       await image.decode();
       const canvas = document.createElement("canvas");
-      canvas.width = 640;
+      canvas.width = 480;
       canvas.height = 480;
       const context = canvas.getContext("2d")!;
+      window.cameraTest = { multiple: false, tracks: [] };
       const draw = () => {
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        if (window.cameraTest.multiple) {
+          for (let y = 0; y < 2; y++)
+            for (let x = 0; x < 2; x++) context.drawImage(image, x * 240, y * 240, 240, 240);
+        } else {
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        }
+        // Ensure Chromium presents fresh frames even for the same source image.
         context.fillStyle = `rgb(${Math.floor(performance.now()) % 255}, 0, 0)`;
         context.fillRect(0, 0, 1, 1);
       };
       draw();
-      setInterval(draw, 1000 / 15);
-      navigator.mediaDevices.getUserMedia = async () => canvas.captureStream(15);
+      setInterval(draw, 1000 / 30);
+      navigator.mediaDevices.getUserMedia = async () => {
+        const stream = canvas.captureStream(30);
+        window.cameraTest.tracks.push(...stream.getTracks());
+        return stream;
+      };
     }, base64);
     await page.getByRole("button", { name: "Start kamera" }).click();
     await expect(page.locator(".result-letter")).toHaveText("A", { timeout: 45000 });
+    // Measure completed inference, including transfer, rather than video rendering.
+    await expect
+      .poll(
+        () =>
+          page
+            .getByLabel("Tracking frame rate")
+            .textContent()
+            .then((text) => parseInt(text || "0")),
+        { timeout: 15000 },
+      )
+      .toBeGreaterThan(10);
+
+    await page.evaluate(() => {
+      window.cameraTest.multiple = true;
+    });
+    await expect
+      .poll(() =>
+        page
+          .locator(".result-meta")
+          .textContent()
+          .then((text) => parseInt(text || "0")),
+      )
+      .toBeGreaterThan(2);
+    const still = await page.evaluate(() => {
+      const video = document.querySelector("video")!;
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d")!.drawImage(video, 0, 0);
+      return window.desktop!.recognize(canvas.toDataURL("image/jpeg", 0.95));
+    });
+    expect(still.hands.length).toBeGreaterThan(2);
+    for (const hand of still.hands) {
+      expect(hand.landmarks).toHaveLength(21);
+      expect(hand.features).toHaveLength(63);
+    }
+
     await page.getByRole("button", { name: "Stopp kamera" }).click();
     await expect(page.getByText("Kamera av")).toBeVisible();
+    expect(
+      await page.locator("video").evaluate((element) => (element as HTMLVideoElement).srcObject),
+    ).toBeNull();
+    expect(
+      await page.evaluate(() =>
+        window.cameraTest.tracks.every((track) => track.readyState === "ended"),
+      ),
+    ).toBe(true);
+
+    await page.evaluate(() => {
+      window.cameraTest.multiple = false;
+    });
+    await page.getByRole("button", { name: "Start kamera" }).click();
+    await expect(page.locator(".result-letter")).toHaveText("A");
+    await expect(page.getByText("1 hånd funnet")).toBeVisible();
+    await page.getByRole("button", { name: "Bilde", exact: true }).click();
+    expect(
+      await page.evaluate(() =>
+        window.cameraTest.tracks.every((track) => track.readyState === "ended"),
+      ),
+    ).toBe(true);
+    await page.getByRole("button", { name: "Live kamera", exact: true }).click();
+    await expect(page.getByText("Kamera av")).toBeVisible();
+    await page.getByRole("button", { name: "Start kamera" }).click();
+    await expect(page.locator(".result-letter")).toHaveText("A");
+    await page.getByRole("button", { name: "Stopp kamera" }).click();
   } finally {
     await application.close();
   }

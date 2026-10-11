@@ -7,7 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const model = path.join(root, "data", "hand_landmarker.task");
 if (!existsSync(model))
   throw new Error("Run ./setup.sh to download the MediaPipe model before packaging.");
-const classifier = path.join(root, "model", "knn.pkl");
+const classifier = path.join(root, "data", "knn.pkl");
 if (!existsSync(classifier))
   throw new Error("Run uv run python model/knn.py to train the ASL classifier before packaging.");
 const child = spawn(
@@ -35,7 +35,7 @@ const child = spawn(
     "--add-data",
     `${model}:data`,
     "--add-data",
-    `${classifier}:model`,
+    `${classifier}:data`,
     "--collect-all",
     "mediapipe",
     "--hidden-import",

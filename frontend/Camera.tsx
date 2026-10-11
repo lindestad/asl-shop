@@ -12,6 +12,7 @@ export default function CameraView() {
   const [result, setResult] = useState<Recognition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
+  const [fps, setFps] = useState(0);
 
   function stop() {
     session.current++;
@@ -21,6 +22,7 @@ export default function CameraView() {
     setRunning(false);
     setStarting(false);
     setResult(null);
+    setFps(0);
   }
 
   useEffect(() => {
@@ -78,6 +80,8 @@ export default function CameraView() {
     let canceled = false;
     let busy = false;
     let callback = 0;
+    let completedFrames = 0;
+    let sampleStarted = 0;
 
     async function analyzeFrame() {
       if (busy || !element.videoWidth) return;
@@ -93,6 +97,14 @@ export default function CameraView() {
         if (!canceled) {
           setResult(recognition);
           setError(null);
+          const now = performance.now();
+          if (!sampleStarted) sampleStarted = now;
+          else completedFrames++;
+          if (now - sampleStarted >= 1000) {
+            setFps(Math.round(completedFrames * 1000 / (now - sampleStarted)));
+            completedFrames = 0;
+            sampleStarted = now;
+          }
         }
       } catch (reason) {
         if (!canceled) {
@@ -153,6 +165,9 @@ export default function CameraView() {
           <div className="preview-footer">
             <span>
               {running ? "Håndanalyse kjører lokalt" : "Ingen video tas opp eller lagres"}
+              {running && window.desktop && (
+                <> · <span aria-label="Tracking frame rate">{fps} FPS</span></>
+              )}
             </span>
             <button
               className="primary-button"

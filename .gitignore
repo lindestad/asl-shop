@@ -225,6 +225,12 @@ __marimo__/
 !/data/.gitkeep
 *.task
 
+# Generated training artifacts belong in data/; ignore legacy output paths too.
+/extactedLandmarks.csv
+/model/*.pkl
+/model/*.npz
+/model/pca_letters.png
+
 # Frontend and desktop build artifacts
 node_modules/
 dist/
