@@ -1,23 +1,48 @@
-"""Persistent newline-delimited JSON adapter for the existing hand detector.
+"""Persistent newline-delimited JSON adapter for hand and letter recognition.
 
 Stdout is reserved for protocol messages. MediaPipe diagnostics go to stderr.
-Letter prediction is intentionally null until the classifier in issue #7 exists.
 """
 
 import base64
 import json
 from pathlib import Path
+import pickle
 import sys
 import time
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(ROOT))
-
+CLASSIFIER_PATH = ROOT / "data" / "knn.pkl"
+classifier = None
 
 video_detector = None
 video_timestamp = -1
 video_scan_timestamp = -1
 video_capacity = 0
+
+
+def get_classifier():
+    global classifier
+    if classifier is None and CLASSIFIER_PATH.exists():
+        with open(CLASSIFIER_PATH, "rb") as f:
+            classifier = pickle.load(f)
+        if classifier.n_features_in_ != 63:
+            raise ValueError("The ASL classifier uses an incompatible feature format.")
+    return classifier
+
+
+def predict_letter(hands, model):
+    if not hands or model is None:
+        return None
+    import numpy as np
+
+    hand = max(hands, key=lambda item: item["score"])
+    probabilities = model.predict_proba(hand["features"].reshape(1, -1))[0]
+    winner = int(np.argmax(probabilities))
+    # Require a clear majority of neighbours (3 of 5 with the default k).
+    if probabilities[winner] < 0.6:
+        return None
+    return {"letter": str(model.classes_[winner]), "confidence": float(probabilities[winner])}
 
 
 def track(frame):
@@ -63,11 +88,12 @@ def analyze(data_url, video=False):
         hands = track(frame)
     else:
         hands = extractHands(frame, detector)
+    model = get_classifier()
     return {
         "width": width,
         "height": height,
-        "classifierAvailable": False,
-        "prediction": None,
+        "classifierAvailable": model is not None,
+        "prediction": predict_letter(hands, model),
         "hands": [
             {"hand": hand["hand"], "score": float(hand["score"]),
              "features": hand["features"].tolist(),

@@ -16,7 +16,7 @@ export default defineConfig({
   projects: [
     {
       name: "web",
-      testMatch: "**/editor.spec.ts",
+      testMatch: "**/app.spec.ts",
       use: {
         browserName: "chromium",
         launchOptions: {

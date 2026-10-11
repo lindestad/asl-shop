@@ -2,7 +2,7 @@
   "name": "asl-shop",
   "version": "0.1.0",
   "private": true,
-  "description": "An image and sign language studio",
+  "description": "ASL letter recognition from live camera and images",
   "author": "ASL Shop contributors",
   "type": "module",
   "main": "electron/main.mjs",
@@ -32,7 +32,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.1.2",
     "electron": "^44.5.1",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.5.0",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0",
     "typescript": "^5.9.3",
@@ -63,16 +63,16 @@
       "target": [
         "AppImage"
       ],
-      "category": "Graphics",
+      "category": "Education",
       "syncDesktopName": true
     },
     "mac": {
       "target": [
         "dmg"
       ],
-      "category": "public.app-category.graphics-design",
+      "category": "public.app-category.education",
       "extendInfo": {
-        "NSCameraUsageDescription": "Use your camera to detect hand landmarks and capture images."
+        "NSCameraUsageDescription": "Use your camera for live sign language recognition."
       }
     },
     "win": {

@@ -110,11 +110,6 @@ else
     echo "MediaPipe model is already installed."
 fi
 
-"$uv_bin" run --no-sync python scripts/download_dataset.py
-
-echo "Preparing the packaging backend..."
-npm run build:backend
-
 # An executable script cannot update its parent shell's PATH. Save the actual
 # runtime paths, including fnm's persistent Node directory, for this terminal.
 node_dir="$(node -p 'require("node:path").dirname(process.execPath)')"
