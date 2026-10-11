@@ -27,14 +27,27 @@ npm run dev
 grensesnittet i nettleser, uten lokal gjenkjenning.
 
 `setup.sh` installerer prosjektets Node- og Python-avhengigheter og MediaPipe-modellen.
-Datasett, landemerker og trente modeller ligger i den Git-ignorerte `data/`-mappen.
-Ved første oppsett må bokstavmodellen trenes før lokal bokstavgjenkjenning og pakking:
+Det ferdige landemerkeuttrekket følger med som `data/extracted_landmarks.csv`, slik at
+hver maskin slipper den tidkrevende bildeanalysen. Originalbilder og trente modeller
+ligger lokalt i den Git-ignorerte `data/`-mappen. Ved første oppsett trenger du bare
+å trene bokstavmodellen før lokal bokstavgjenkjenning og pakking:
+
+```sh
+uv run python model/knn.py
+```
+
+Last bare ned originalbildene hvis du vil kjøre desktop-testene eller generere et
+nytt landemerkeuttrekk fra ASL Alphabet-datasettet:
 
 ```sh
 uv run python scripts/download_dataset.py
 uv run python load_data.py
 uv run python model/knn.py
 ```
+
+`load_data.py` erstatter det delte CSV-uttrekket. Bruk `--output data/my_landmarks.csv`
+og `model/knn.py --input data/my_landmarks.csv` for et forsøk som ikke endrer den
+versjonerte filen.
 
 `load_data.py` bruker samme normalisering som appen og skriver 63 koordinater per hånd
 til `data/extracted_landmarks.csv`. Uten valg behandles alle treningsbildene. For en
@@ -48,7 +61,7 @@ Antallet rader kan avvike fra antallet bilder, fordi noen bilder ikke gir håndd
 
 `model/knn.py` bruker et fast 70/30-utvalg med seed 42, skriver antall trenings- og
 evalueringsrader og måler nøyaktighet på de holdte radene før `data/knn.pkl` lagres.
-Det tidligere fullstendige CSV-uttrekket hadde 63 932 rader, hvorav 44 752 ble brukt
+Det medfølgende CSV-uttrekket har 63 932 rader, hvorav 44 752 blir brukt
 til trening. Nye uttrekk kan gi andre antall. Evalueringen bruker samme bildedatasett
 som treningen og måler ikke generalisering til nye personer, bakgrunner og lysforhold.
 Begge skriptene har `--input` og `--output` for andre lokale filbaner. Standardbanene

@@ -223,9 +223,10 @@ __marimo__/
 # Lokale data og modellfiler (les README)
 /data/*
 !/data/.gitkeep
+!/data/extracted_landmarks.csv
 *.task
 
-# Generated training artifacts belong in data/; ignore legacy output paths too.
+# Runtime models stay local; the shared landmark CSV is the exception above.
 /extactedLandmarks.csv
 /model/*.pkl
 /model/*.npz
