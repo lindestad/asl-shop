@@ -39,6 +39,11 @@ uv run python model/knn.py
 `load_data.py` bruker samme normalisering som appen og skriver 63 koordinater per hånd
 til `data/extracted_landmarks.csv`. Uten valg behandles alle treningsbildene. For en
 raskere prøve, bruk `uv run python load_data.py --samples-per-class 120 --seed 42`.
+Uttrekket bruker opptil fire CPU-prosesser som standard. `--workers 2` bruker færre
+ressurser på en laptop; `--workers 1` kjører sekvensielt. Hver prosess gjenbruker sin
+egen MediaPipe-detektor. Radrekkefølgen og seed er de samme uansett antall prosesser.
+Fremdriften viser bilder per sekund og anslått tid igjen. Et eksisterende CSV-uttrekk
+erstattes først når hele jobben er ferdig, slik at avbrudd ikke ødelegger det.
 Antallet rader kan avvike fra antallet bilder, fordi noen bilder ikke gir hånddeteksjon.
 
 `model/knn.py` bruker et fast 70/30-utvalg med seed 42, skriver antall trenings- og
