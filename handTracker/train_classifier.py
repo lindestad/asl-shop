@@ -33,6 +33,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
+from sklearn.calibration import CalibratedClassifierCV
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data" / "landmarks.npz"
@@ -45,7 +46,8 @@ def make_models(seed):
     # trenger likevel StandardScaler for å fungere godt.
     return {
         "knn": KNeighborsClassifier(n_neighbors=5, weights="distance"),
-        "svm": make_pipeline(StandardScaler(), SVC(C=10, probability=True, random_state=seed)),
+        #"svm": make_pipeline(StandardScaler(), SVC(C=10, probability=True, random_state=seed)),
+        "svm": make_pipeline(StandardScaler(), CalibratedClassifierCV(SVC(C=10), ensemble=False)),
         "rf": RandomForestClassifier(n_estimators=300, n_jobs=-1, random_state=seed),
         "mlp": make_pipeline(
             StandardScaler(),
