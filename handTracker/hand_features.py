@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 import cv2
 import numpy as np
@@ -7,7 +8,7 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from mediapipe.tasks.python.components.containers import landmark
 
-model_path = Path(__file__).resolve().parents[1] / 'data' / 'hand_landmarker.task'
+model_path = Path(os.environ.get('ASL_MEDIAPIPE_MODEL', Path(__file__).resolve().parents[1] / 'data' / 'hand_landmarker.task'))
 
 def create_detector(num_hands=8, running_mode=vision.RunningMode.IMAGE):
     return vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(

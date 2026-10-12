@@ -1,0 +1,286 @@
+{
+  "date": "2026-10-12",
+  "contract": "asl-shop-xy-wrist-v2",
+  "handshape": {
+    "accuracy": 0.834267090966135,
+    "frames": 156179,
+    "threshold": 0.8,
+    "accepted_coverage": 0.7213453793403722,
+    "accepted_accuracy": 0.9456235187601523,
+    "per_class": {
+      "nothing": {
+        "recall": null,
+        "frames": 0
+      },
+      "A": {
+        "recall": 0.8086943234777294,
+        "frames": 13089
+      },
+      "B": {
+        "recall": 0.8675269949960495,
+        "frames": 3797
+      },
+      "C": {
+        "recall": 0.8661395086133861,
+        "frames": 7082
+      },
+      "D": {
+        "recall": 0.8425405226596097,
+        "frames": 6046
+      },
+      "E": {
+        "recall": 0.7966469263491534,
+        "frames": 11989
+      },
+      "F": {
+        "recall": 0.892188213796254,
+        "frames": 2189
+      },
+      "G": {
+        "recall": 0.8832,
+        "frames": 4375
+      },
+      "H": {
+        "recall": 0.8637596899224806,
+        "frames": 5160
+      },
+      "I": {
+        "recall": 0.8022031585104309,
+        "frames": 10258
+      },
+      "K": {
+        "recall": 0.8496784565916399,
+        "frames": 3732
+      },
+      "L": {
+        "recall": 0.8795481698707505,
+        "frames": 9207
+      },
+      "M": {
+        "recall": 0.8329755259768141,
+        "frames": 6987
+      },
+      "N": {
+        "recall": 0.8610747051114024,
+        "frames": 10682
+      },
+      "O": {
+        "recall": 0.7946487042754233,
+        "frames": 10689
+      },
+      "P": {
+        "recall": 0.8795913403064948,
+        "frames": 4111
+      },
+      "Q": {
+        "recall": 0.8591885441527446,
+        "frames": 419
+      },
+      "R": {
+        "recall": 0.8153818280641363,
+        "frames": 11039
+      },
+      "S": {
+        "recall": 0.8134559735427863,
+        "frames": 9676
+      },
+      "T": {
+        "recall": 0.8603773584905661,
+        "frames": 8745
+      },
+      "U": {
+        "recall": 0.75391689373297,
+        "frames": 5872
+      },
+      "V": {
+        "recall": 0.8859232175502743,
+        "frames": 2735
+      },
+      "W": {
+        "recall": 0.9014236410698878,
+        "frames": 4636
+      },
+      "X": {
+        "recall": 0.9086809470124013,
+        "frames": 887
+      },
+      "Y": {
+        "recall": 0.772776377385668,
+        "frames": 2777
+      }
+    },
+    "label_provenance": "agreement with model-derived frame annotations, not human held-letter accuracy",
+    "idle_false_positive_rate": null,
+    "split": "test",
+    "seconds": 0.175,
+    "contract": "asl-shop-xy-wrist-v2",
+    "gpu": null
+  },
+  "legacy_knn_transfer": {
+    "model": "KNN5 re-trained on all legacy alphabet CSV static letters using matching42XY normalization",
+    "training_rows": 55634,
+    "test_frames": 156179,
+    "accuracy": 0.40751317398625936,
+    "accepted_coverage": 0.960641315413724,
+    "accepted_accuracy": 0.4160445771568732,
+    "threshold": 0.6,
+    "seconds": 63.73706959999981,
+    "label_provenance": "OpenFS refined pseudo-label agreement, not human live letters",
+    "comparison": "Different training data and architecture; not an architecture-only ablation."
+  },
+  "causal_sequence": {
+    "parameters": 835453,
+    "epochs": 30,
+    "training_seconds": 2246.74,
+    "best_validation_score": 0.1407206527378201,
+    "torch": "2.11.0+cu128",
+    "gpu": "NVIDIA GeForce RTX 5080",
+    "test": {
+      "cer": 0.13541836273179556,
+      "exact_sequence_accuracy": 0.1810558262119639,
+      "errors": 29941,
+      "characters": 221100,
+      "exact": 2267,
+      "clips": 12521,
+      "decoder": "greedy CTC; no dictionary or language correction",
+      "idle_false_positive_rate": null,
+      "split": "test",
+      "seconds": 4.61
+    }
+  },
+  "openfs_reference": {
+    "cer": 0.06286748077792854,
+    "exact_sequence_accuracy": 0.5932433511700343,
+    "errors": 13900,
+    "characters": 221100,
+    "exact": 7428,
+    "clips": 12521,
+    "model": "official OpenFS FSboard pretrained recognizer",
+    "source_commit": "cd29c853dd880816de1166bab2d9c56ff960d5e1",
+    "decoder": "upstream greedy autoregressive; no dictionary/language correction",
+    "max_output": 128,
+    "device": "cpu",
+    "seconds": 586.9701956000063,
+    "invalid_special_tokens": 0,
+    "sample_selection": "all available archive clips"
+  },
+  "runtime_latency": {
+    "scope": "CPU NeuralRuntime with feature conversion and decoding; excludes MediaPipe, camera, IPC",
+    "source_clip": "9fc2_1_20220920_112246_230533_253956",
+    "source_frames": 711,
+    "fps": "nominal 30",
+    "torch": "2.14.1+cpu",
+    "model_hashes": {
+      "handshape": "fde02e0a13ed5ec736d446334c75706ab2ee875772836ab95c9900c65da57373",
+      "sequence": "a74c680d5d35816144af30101c475e448adc424770ab43bdc908a8d7c73911e8"
+    },
+    "measurements": [
+      {
+        "threads": 4,
+        "segment_frames": 100,
+        "source_cycled": false,
+        "p50_ms": 2.95085,
+        "p95_ms": 3.67896,
+        "tail100_p50_ms": 2.95085,
+        "tail100_p95_ms": 3.67896,
+        "runtime_frames": 100,
+        "finish": {
+          "first_ms": 388.0579,
+          "warmed_p50_ms": 17.5564,
+          "method": "openfs",
+          "context": "spelling",
+          "error": null,
+          "scope": "Final-text model only; first call includes lazy checkpoint load"
+        }
+      },
+      {
+        "threads": 4,
+        "segment_frames": 300,
+        "source_cycled": false,
+        "p50_ms": 3.8644499999999997,
+        "p95_ms": 5.421340000000001,
+        "tail100_p50_ms": 4.9159,
+        "tail100_p95_ms": 5.78438,
+        "runtime_frames": 300,
+        "finish": {
+          "first_ms": 82.7098,
+          "warmed_p50_ms": 78.6718,
+          "method": "openfs",
+          "context": "spelling",
+          "error": null,
+          "scope": "Final-text model only; first call includes lazy checkpoint load"
+        }
+      },
+      {
+        "threads": 4,
+        "segment_frames": 900,
+        "source_cycled": true,
+        "p50_ms": 6.2067,
+        "p95_ms": 8.727654999999999,
+        "tail100_p50_ms": 8.5344,
+        "tail100_p95_ms": 9.31169,
+        "runtime_frames": 900,
+        "finish": {
+          "first_ms": 182.2363,
+          "warmed_p50_ms": 189.1931,
+          "method": "openfs",
+          "context": "spelling",
+          "error": null,
+          "scope": "Final-text model only; first call includes lazy checkpoint load"
+        }
+      }
+    ]
+  },
+  "checkpoint_sha256": {
+    "data/handshape.pt": "9a28797368276e06e4e925a27edd13439c7f329694f5f82261b689f5767565fd",
+    "data/sequence.pt": "4b50e8d0f17d92cf0fec83e6b213d7f2e0d864c9a97d7af413b716e8a7817297",
+    "data/openfs-checkpoints/recognizer_fsboard/best_model.pth": "0e66c64baa9c4bb1e1299aeac2a4c4668204674677931398640caa4baaffd5d1"
+  },
+  "dataset_counts": [
+    {
+      "split": "validation",
+      "source_clips": 12015,
+      "clips": 12015,
+      "frames": 2160110,
+      "clean_clips": 3213,
+      "handshape_frames": 99824,
+      "skipped": {},
+      "seconds": 2.49,
+      "signers": 15
+    },
+    {
+      "split": "test",
+      "source_clips": 12521,
+      "clips": 12521,
+      "frames": 2487566,
+      "clean_clips": 4142,
+      "handshape_frames": 156179,
+      "skipped": {},
+      "seconds": 2.95,
+      "signers": 15
+    },
+    {
+      "split": "train",
+      "source_clips": 126134,
+      "clips": 126131,
+      "frames": 25411107,
+      "clean_clips": 24065,
+      "handshape_frames": 818163,
+      "skipped": {
+        "length": 3
+      },
+      "seconds": 31.35,
+      "signers": 117
+    }
+  ],
+  "checks": {
+    "python_passed": 46,
+    "python_skipped": 3,
+    "cuda_packed_passed": 6,
+    "web_passed": 3,
+    "electron_passed": 2,
+    "build": true,
+    "lint": true,
+    "changed_file_formatting": true
+  }
+}

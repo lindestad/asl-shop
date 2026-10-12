@@ -8,13 +8,17 @@ const model = path.join(root, "data", "hand_landmarker.task");
 if (!existsSync(model))
   throw new Error("Run ./setup.sh to download the MediaPipe model before packaging.");
 const classifier = path.join(root, "data", "knn.pkl");
-if (!existsSync(classifier))
+const neuralModels = ["handshape.pt", "sequence.pt"]
+  .map((name) => path.join(root, "data", name))
+  .filter(existsSync);
+if (!existsSync(classifier) && !neuralModels.length)
   throw new Error("Run uv run python model/knn.py to train the ASL classifier before packaging.");
 const child = spawn(
   "uv",
   [
     "run",
     "--locked",
+    ...(neuralModels.length ? ["--extra", "neural"] : []),
     "--python",
     "3.12",
     "--with",
@@ -34,8 +38,9 @@ const child = spawn(
     root,
     "--add-data",
     `${model}:data`,
-    "--add-data",
-    `${classifier}:data`,
+    ...(existsSync(classifier) ? ["--add-data", `${classifier}:data`] : []),
+    ...neuralModels.flatMap((filename) => ["--add-data", `${filename}:data`]),
+    ...(neuralModels.length ? ["--collect-all", "torch", "--hidden-import", "model.neural"] : []),
     "--collect-all",
     "mediapipe",
     "--hidden-import",

@@ -66,7 +66,7 @@ handle("images:open", async () => {
   };
 });
 handle("recognition:analyze", (dataUrl) => recognition.analyze(dataUrl));
-handle("recognition:frame", (dataUrl) => recognition.analyze(dataUrl, true));
+handle("recognition:frame", (dataUrl, options) => recognition.analyze(dataUrl, true, options));
 
 async function createWindow() {
   window = new BrowserWindow({

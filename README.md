@@ -1,5 +1,43 @@
 # ASL Shop
 
+An optional [neural letter and temporal fingerspelling pipeline](docs/neural-recognition.md)
+adds separate current-letter and spelled-text outputs, explicit collection,
+signer-disjoint training/evaluation, and OpenFS import support. Trained checkpoints
+are local data artifacts; the existing KNN remains a static-letter fallback when
+the neural head is unavailable. Optional external OpenFS refinement runs on Finish.
+
+The [measured FSboard results and reproduction commands](docs/training-results-2026-10-12.md)
+compare the legacy-data KNN, trained handshape/causal models and released OpenFS
+checkpoint on held-out signers. Static scores use model-derived labels; live
+held-letter accuracy and idle rejection still need human-labelled evaluation.
+
+The official OpenFS FSboard downloads can be resumed and extracted with:
+
+```powershell
+uv run --with gdown python scripts/download_openfs.py --directory 'C:\Users\danie\dev\asl-shop\data\external\openfs' --extract
+```
+
+The two archives are `fingerspelling_fsboard_raw.zip` (re-extracted landmarks,
+not video) and `fingerspelling_fsboard_proc_clean.zip` (model-derived cleaned frame
+annotations). Existing ZIPs are reused and retained. Add `--verify` for a full CRC
+scan. On macOS/Linux, `./setup.sh --neural` installs neural dependencies;
+`./setup.sh --extract-openfs --openfs-dir /path/to/openfs` also prepares the data.
+The optional OpenFS download is approximately 12.7 GB compressed. Dataset and
+upstream code terms remain those of [OpenFS](https://github.com/AIRC-KETI/OpenFS).
+
+Native Windows setup is available with uv and Node.js 22.12+ installed:
+
+```powershell
+.\setup.ps1 -Neural
+.\setup.ps1 -ExtractOpenFS -OpenFSDir 'C:\Users\danie\dev\asl-shop\data\external\openfs'
+```
+
+The default `setup.ps1` skips OpenFS and neural dependencies. `-OpenFS` resumes or
+reuses the archives without extraction; `-ExtractOpenFS` also extracts them.
+Add `-Plan` to inspect commands without modifying anything. Launch trained
+checkpoints with `scripts/start-neural.ps1`; see
+the [neural guide](docs/neural-recognition.md#run-the-app) for external model paths.
+
 En Electron-app for gjenkjenning av ASL-bokstaver fra live kamera eller ett bilde.
 Appen har to visninger: **Live kamera** og **Bilde**. Bilder og kamerarammer analyseres
 lokalt av en Python-prosess med MediaPipe Hand Landmarker.

@@ -5,6 +5,7 @@ Stdout is reserved for protocol messages. MediaPipe diagnostics go to stderr.
 
 import base64
 import json
+import os
 from pathlib import Path
 import pickle
 import sys
@@ -12,8 +13,10 @@ import time
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(ROOT))
-CLASSIFIER_PATH = ROOT / "data" / "knn.pkl"
+CLASSIFIER_PATH = Path(os.environ.get("ASL_KNN_MODEL", ROOT / "data" / "knn.pkl"))
 classifier = None
+from model.live_neural import NeuralRuntime
+neural = NeuralRuntime(ROOT)
 
 video_detector = None
 video_timestamp = -1
@@ -42,7 +45,10 @@ def predict_letter(hands, model):
     # Require a clear majority of neighbours (3 of 5 with the default k).
     if probabilities[winner] < 0.6:
         return None
-    return {"letter": str(model.classes_[winner]), "confidence": float(probabilities[winner])}
+    letter = str(model.classes_[winner])
+    if letter in {"J", "Z", "nothing", "del", "space"}:
+        return None
+    return {"letter": letter, "confidence": float(probabilities[winner]), "method": "knn"}
 
 
 def track(frame):
@@ -70,7 +76,7 @@ def track(frame):
     return extractHands(frame, video_detector, video_timestamp)
 
 
-def analyze(data_url, video=False):
+def analyze(data_url, video=False, session_id=None, timestamp_ms=None, finish=False):
     import cv2
     import numpy as np
     from handTracker.hand_features import detector, extractHands
@@ -88,12 +94,17 @@ def analyze(data_url, video=False):
         hands = track(frame)
     else:
         hands = extractHands(frame, detector)
-    model = get_classifier()
+    outputs = neural.analyze(hands, width, height, video=video, session_id=session_id,
+                             timestamp_ms=timestamp_ms, finish=finish)
+    model = None
+    if not outputs["handshapeAvailable"]:
+        model = get_classifier()
+        outputs["prediction"] = predict_letter(hands, model)
     return {
         "width": width,
         "height": height,
-        "classifierAvailable": model is not None,
-        "prediction": predict_letter(hands, model),
+        "classifierAvailable": model is not None or outputs["handshapeAvailable"],
+        **outputs,
         "hands": [
             {"hand": hand["hand"], "score": float(hand["score"]),
              "features": hand["features"].tolist(),
@@ -108,7 +119,9 @@ def main():
         request = {}
         try:
             request = json.loads(line)
-            response = {"id": request["id"], "result": analyze(request["dataUrl"], request.get("video", False))}
+            response = {"id": request["id"], "result": analyze(
+                request["dataUrl"], request.get("video", False), request.get("sessionId"),
+                request.get("timestampMs"), request.get("finish", False))}
         except Exception as error:
             response = {"id": request.get("id"), "error": str(error)}
         print(json.dumps(response, allow_nan=False), flush=True)

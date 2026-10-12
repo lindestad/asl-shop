@@ -34,3 +34,42 @@ test("stops the camera when leaving the live view", async ({ page, context }) =>
   await page.getByRole("button", { name: "Live kamera" }).click();
   await expect(page.getByText("Kamera av")).toBeVisible();
 });
+
+test("shows independent neural letter and sequence outputs, finishes and resets text", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["camera"]);
+  await page.addInitScript(() => {
+    window.desktop = {
+      openImage: async () => null,
+      recognize: async () => {
+        throw new Error("Unused image request");
+      },
+      recognizeFrame: async (_image, options) => ({
+        hands: [],
+        width: 640,
+        height: 480,
+        classifierAvailable: true,
+        handshapeAvailable: true,
+        prediction: { letter: "B", confidence: 0.95, method: "neural" },
+        fingerspelling: {
+          available: true,
+          text: "AAB",
+          frames: 12,
+          status: options.finish ? "finished" : "recognizing",
+          provisional: !options.finish,
+        },
+      }),
+    };
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start kamera" }).click();
+  await expect(page.locator(".result-letter")).toHaveText("B");
+  await expect(page.locator(".spelled-text")).toHaveText("AAB");
+  await expect(page.getByText("Nevral bokstavmodell", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Fullfør tekst" }).click();
+  await expect(page.getByText("Sekvensen er ferdig.")).toBeVisible();
+  await page.getByRole("button", { name: "Ny sekvens" }).click();
+  await expect(page.getByText("Foreløpig tekst", { exact: false })).toBeVisible();
+});
