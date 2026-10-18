@@ -64,6 +64,7 @@ import time
 from types import SimpleNamespace
 
 # Before torch initialises its caching allocator; see scripts/train_openfs.py.
+os.environ.setdefault('PYTORCH_ALLOC_CONF','expandable_segments:True')
 os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF','expandable_segments:True')
 
 import numpy as np
