@@ -751,7 +751,7 @@ def compare(report,published):
     after merging so cross-adapter deltas appear even when the adapters ran in separate processes."""
     comparison=report.setdefault('comparison',{})
     for key in [key for key in comparison if key.endswith(('_minus_control42_released','_minus_control42_fine_tuned'))
-                or key.startswith('chunked_cost_')]:
+                or key.startswith('chunked_cost_') or key=='chunked_cost']:
         del comparison[key]
     for stage in ('released','fine_tuned'):
         control=report['adapters'].get('control42',{}).get(stage,{}).get('full-clip')

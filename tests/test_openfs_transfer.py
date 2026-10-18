@@ -516,8 +516,10 @@ class ReportComparisonTests(unittest.TestCase):
         compare(report,dict(cer=.06,exact_sequence_accuracy=.59))
         self.assertIn('control_vs_published',report['comparison'])
         keys=set(report['comparison'])
+        report['comparison']['chunked_cost']={'legacy':True}  # older runs wrote this key
         compare(report,dict(cer=.06,exact_sequence_accuracy=.59))  # merging re-runs compare
         self.assertEqual(keys,set(report['comparison']))
+        self.assertNotIn('chunked_cost',report['comparison'])
         self.assertEqual(report['comparison']['gaps42_minus_control42_released']['cer_points'],0.3)
 
     def test_merging_a_gaps91_run_adds_cross_adapter_deltas(self):
