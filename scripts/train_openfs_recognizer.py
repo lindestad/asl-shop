@@ -258,7 +258,8 @@ def evaluate(model,data,args,split):
     started=time.perf_counter()
     stats=defaultdict(lambda:dict(errors=0,characters=0,exact=0,clips=0))
     examples=[]
-    for batch in batches(data,args.batch_size,args.input_representation,limit=args.validation_limit):
+    for batch in batches(data,getattr(args,'validation_batch_size',None) or args.batch_size,args.input_representation,
+                         limit=args.validation_limit):
         poses,segments,positions,_,selected=batch
         decoded=model.generate(poses.to(args.device),segments.to(args.device),
                                positions.to(args.device),max_chars=args.max_decode).cpu()
@@ -319,7 +320,11 @@ def main():
     p.add_argument('--max-decode',type=int,default=48)
     p.add_argument('--patience',type=int,default=0,help='0 disables early stopping (paper schedule)')
     p.add_argument('--no-augment',action='store_true')
-    p.add_argument('--fp32',action='store_true',help='disable bf16 autocast')
+    p.add_argument('--fp32',action='store_true',help='disable autocast (same as --amp off)')
+    p.add_argument('--amp',choices=['auto','bf16','fp16'],default='auto',help="auto: bf16 on Ampere and newer, fp16 "
+                   "with a GradScaler below it (Volta has no bf16 tensor cores, and flash attention needs sm_80)")
+    p.add_argument('--validation-batch-size',type=int,help='defaults to --batch-size; lower it if validation decode '
+                   'on the longest clips does not fit next to other jobs')
     p.add_argument('--seed',type=int,default=42)
     p.add_argument('--device',default='cuda')
     p.add_argument('--limit-clips',type=int)
@@ -331,7 +336,11 @@ def main():
     if args.output.exists() and not (args.force or args.resume):
         raise ValueError(f'{args.output} already exists; use a fresh run name (never overwrite checkpoints).')
     args.input_dim=91 if args.input_representation=='gaps' else 42
-    args.amp=not args.fp32
+    args.validation_batch_size=args.validation_batch_size or args.batch_size
+    cuda=args.device.startswith('cuda')
+    amp='off' if args.fp32 or not cuda else args.amp
+    if amp=='auto': amp='bf16' if cuda and torch.cuda.get_device_capability(args.device)[0]>=8 else 'fp16'
+    args.amp=amp; args.amp_dtype={'bf16':torch.bfloat16,'fp16':torch.float16}.get(amp)
     random.seed(args.seed);np.random.seed(args.seed);torch.manual_seed(args.seed)
     clip_tokens.rng=np.random.default_rng(args.seed)
     torch.set_num_threads(4)
@@ -353,7 +362,7 @@ def main():
         model.load_state_dict(payload['state_dict'],strict=True)
     parameters=sum(q.numel() for q in model.parameters())
     print(json.dumps(dict(task='recognizer',representation=args.input_representation,parameters=parameters,
-                          torch=torch.__version__,device=args.device,
+                          torch=torch.__version__,device=args.device,amp=args.amp,
                           gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None,
                           training=len(train['clips']),validation=len(validation['clips']))),flush=True)
     baseline=None
@@ -361,6 +370,7 @@ def main():
         baseline=evaluate(model,validation,args,'validation-untrained')
         print(json.dumps({k:baseline[k] for k in ('split','cer','letter_accuracy','exact_sequence_accuracy','seconds')}),flush=True)
     optimizer=torch.optim.Adam(model.parameters(),lr=args.learning_rate)
+    scaler=torch.amp.GradScaler('cuda',enabled=args.amp=='fp16')
     scheduler=torch.optim.lr_scheduler.StepLR(optimizer,args.lr_step,gamma=args.lr_gamma)
     best=float('inf');stale=0;history=[];run_started=time.perf_counter()
     for epoch in range(1,args.epochs+1):
@@ -374,7 +384,7 @@ def main():
             inputs=torch.where(targets[:,:-1]==-100,PAD_CHAR,targets[:,:-1])
             labels=targets[:,1:]
             optimizer.zero_grad(set_to_none=True)
-            with torch.autocast('cuda',dtype=torch.bfloat16,enabled=args.amp and args.device.startswith('cuda')):
+            with torch.autocast('cuda',dtype=args.amp_dtype or torch.float16,enabled=args.amp!='off'):
                 logits,cross_attns=model(poses,segments,positions,inputs)
             ce=torch.nn.functional.cross_entropy(logits.float().reshape(-1,len(VOCAB)),labels.reshape(-1))
             loss=args.ce_weight*ce;ent=mono=0.
@@ -391,9 +401,11 @@ def main():
                             lengths=segments.shape[1],target_lengths=(targets!=-100).sum(1).tolist(),
                             clips=[train['clips'][i]['name'] for i in selected])
                 raise ValueError('Non-finite loss: '+json.dumps(detail))
-            loss.backward()
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(),5.)
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             loss_sum+=loss.item();ce_sum+=ce.item()
             ent_sum+=ent.detach().item() if torch.is_tensor(ent) else 0.
             mono_sum+=mono.detach().item() if torch.is_tensor(mono) else 0.
@@ -417,7 +429,7 @@ def main():
         if args.patience and stale>=args.patience:
             print('Validation early stopping',flush=True);break
     peak=torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
-    report=dict(task='recognizer',representation=args.input_representation,parameters=parameters,
+    report=dict(task='recognizer',representation=args.input_representation,parameters=parameters,amp=args.amp,
                 checkpoint=str(args.output.resolve()) if best<float('inf') else None,
                 best_validation_cer=best,training_seconds=round(time.perf_counter()-run_started,2),
                 epochs=len(history),history=history,baseline=baseline,dataset=schema,
