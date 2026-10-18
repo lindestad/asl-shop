@@ -152,7 +152,7 @@ def clip_tokens(data,index,adapter,augment=False,unmirror=False):
     tokens=window_tokens(values,adapter,rng,unmirror)
     if tokens is None: return None
     return (*tokens,text)
-clip_tokens.rng=np.random
+clip_tokens.rng=np.random.default_rng()  # main pins per epoch; the augment helpers need a Generator
 
 
 def encode_text(text,chars):
@@ -363,11 +363,15 @@ def evaluate(network,chars,data,indexes,adapter,device,mode,options):
 
 
 def training_batches(data,chars,adapter,batch_size,frame_budget,augment=False,shuffle=False,limit=None,
-                     unmirror=False):
+                     unmirror=False,rng=None):
     """Length-grouped training batches (groups shuffled, lengths sorted inside a shuffle window)
-    with targets in the released token layout: BOS..EOS padded with -100."""
+    with targets in the released token layout: BOS..EOS padded with -100.  rng drives the clip
+    sample, the batch order and the augmentation, so a caller that pins it gets the same training
+    data for every adapter and every process: without that, a run in another process would fine-tune
+    on a different random sample and the adapters would not be paired."""
+    rng=rng or np.random.default_rng()  # the augment helpers want a Generator, not the numpy module
     indices=np.arange(len(data['clips']))
-    if shuffle: np.random.shuffle(indices)
+    if shuffle: rng.shuffle(indices)
     if limit: indices=indices[:limit]
     windows=[sorted(indices[i:i+batch_size*50],key=lambda j:data['clips'][j]['end']-data['clips'][j]['start'])
              for i in range(0,len(indices),batch_size*50)]
@@ -381,7 +385,7 @@ def training_batches(data,chars,adapter,batch_size,frame_budget,augment=False,sh
                 batches.append(current);current=[];longest=0
             current.append(index);longest=max(longest,length)
         if current: batches.append(current)
-    if shuffle: random.shuffle(batches)
+    if shuffle: rng.shuffle(batches)
     for selected in batches:
         items=[];targets=[];kept=[]
         for index in selected:
@@ -451,11 +455,16 @@ def run_fine_tuning(network,chars,train,validation,adapter,options,architecture,
     for epoch in range(1,options.epochs+1):
         network.train();started=time.perf_counter()
         loss_sum=ce_sum=ent_sum=mono_sum=steps=clips=0
+        # pinned per epoch: the same clip sample and the same augment decisions for every adapter,
+        # so control42 and the gap adapters see identical training data in identical order
+        epoch_rng=np.random.default_rng(options.seed+epoch)
+        clip_tokens.rng=epoch_rng
         for poses,segments,positions,targets,kept in training_batches(train,chars,adapter,options.batch_size,
                                                                       options.train_frame_budget,
                                                                       augment=not options.no_augment,shuffle=True,
                                                                       limit=options.limit_clips,
-                                                                      unmirror=options.unmirror_left):
+                                                                      unmirror=options.unmirror_left,
+                                                                      rng=epoch_rng):
             poses,segments=poses.to(options.device),segments.to(options.device)
             positions,targets=positions.to(options.device),targets.to(options.device)
             optimizer.zero_grad(set_to_none=True)
@@ -606,7 +615,7 @@ def main():
     if amp=='auto': amp='bf16' if cuda and torch.cuda.get_device_capability(args.device)[0]>=8 else 'fp16'
     args.amp=amp; args.amp_dtype={'bf16':torch.bfloat16,'fp16':torch.float16}.get(amp)
     random.seed(args.seed);np.random.seed(args.seed);torch.manual_seed(args.seed)
-    clip_tokens.rng=np.random.default_rng(args.seed)
+    clip_tokens.rng=np.random.default_rng(args.seed)  # run_fine_tuning re-pins this per epoch
     torch.set_num_threads(4)
     started=time.perf_counter()
     EncoderDecoder,chars,architecture,commit=load_reference(args)
@@ -676,6 +685,7 @@ def main():
                 'merged_runs':previous.get('merged_runs',[])+[report['generated']]}
     peak_overall=0
     for adapter in args.adapter:
+        adapter_started=time.perf_counter()
         args.output=args.outputs[adapter]
         network=EncoderDecoder(char_size=len(chars)+1,
                                **{**architecture,'input_dim':91 if adapter=='gaps91' else 42})
@@ -691,10 +701,12 @@ def main():
             block['released'][mode]=summary;per_mode[mode]=decoded
             emit(adapter,'released',mode,summary)
         if 'full-clip' in per_mode and 'chunked' in per_mode:
-            shared=[index for index in per_mode['chunked']
+            shared=[index for index in per_mode['chunked'] if index in per_mode['full-clip']
                     if len(clip_windows(evaluation['clips'][index]['end']-evaluation['clips'][index]['start'],
                                         args.chunk_frames,args.chunk_overlap))==1]
             block['released']['single_window_agreement']=dict(
+                note='clips that need only one streaming window: their chunked text should equal the '
+                     'full-clip text, which is the plumbing check rather than an accuracy claim',
                 clips=len(shared),identical=sum(per_mode['chunked'][index]==per_mode['full-clip'][index]
                                                 for index in shared))
         if adapter=='control42':
@@ -713,10 +725,22 @@ def main():
         if cuda:
             peak=torch.cuda.max_memory_allocated();peak_overall=max(peak_overall,peak)
             block['peak_vram_mib']=round(peak/2**20)
+        block['seconds']=round(time.perf_counter()-adapter_started,1)
         del network
         if cuda: torch.cuda.empty_cache()
         report['adapters'][adapter]=block
     published=args.published
+    for stage in ('released','fine_tuned'):
+        control=report['adapters'].get('control42',{}).get(stage,{}).get('full-clip')
+        for adapter in report['adapters']:
+            block=report['adapters'][adapter][stage]
+            if not block.get('full-clip'): continue
+            if adapter!='control42' and control:
+                key=f'{adapter}_minus_control42_{stage}'
+                report['comparison'][key]=deltas(control,block['full-clip'])
+            if block.get('chunked'):
+                report['comparison'].setdefault(f'chunked_cost_{stage}',{})[adapter]=\
+                    deltas(block['full-clip'],block['chunked'])
     control=report['adapters'].get('control42',{}).get('released',{}).get('full-clip')
     if control and 'cer' in published:
         report['comparison']['control_vs_published']=dict(
@@ -729,12 +753,6 @@ def main():
                       clips=control['clips'],characters=control['characters']),
             note='both rows use the released weights on the FSboard test split, so the gap is our '
                  'pack plumbing plus decode-time sampling of the same clips')
-    for adapter in args.adapter:
-        released=report['adapters'][adapter]['released']
-        if adapter!='control42' and control:
-            report['comparison'][f'{adapter}_minus_control42_released']=deltas(control,released['full-clip'])
-        if adapter in report['adapters'] and released.get('full-clip') and released.get('chunked'):
-            report['comparison'].setdefault('chunked_cost',{})[adapter]=deltas(released['full-clip'],released['chunked'])
     report['peak_vram_mib']=round(peak_overall/2**20)
     report['seconds']=round(time.perf_counter()-started,1)
     args.report.parent.mkdir(parents=True,exist_ok=True)

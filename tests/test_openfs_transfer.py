@@ -368,6 +368,57 @@ class ReleasedCheckpointTests(unittest.TestCase):
     def frames(self):
         return make_frames(np.full(24,1/30,dtype=np.float32),right=list(range(24)),left=list(range(8,16)))
 
+    def synthetic_data(self):
+        """Six tiny clips in the packed layout read_data returns, long enough to need batching."""
+        clips=[];rows=[]
+        for order in range(6):
+            length=8+2*order
+            values=make_frames(np.full(length,1/30,dtype=np.float32),right=list(range(length)),
+                               left=list(range(2,length-2)))
+            values[:,0:42]=values[:,0:42]+order  # every clip has its own landmark signature
+            clips.append(dict(name=f'clip{order}',start=len(rows),end=len(rows)+length,
+                              text='ABCD'[:order+1]))
+            rows.append(values)
+        return dict(x=np.concatenate(rows),clips=clips)
+
+    def test_every_adapter_fine_tunes_on_the_same_pinned_clip_sample(self):
+        from scripts.finetune_openfs_transfer import training_batches
+        data=self.synthetic_data()
+        def sample(adapter,seed):
+            return [sorted(data['clips'][index]['name'] for index in kept)
+                    for _,_,_,_,kept in training_batches(data,self.chars,adapter,2,40,augment=True,
+                                                          limit=6,rng=np.random.default_rng(seed))]
+        for adapter in ('control42','gaps42','gaps91'):
+            batches=sample(adapter,7)
+            self.assertTrue(batches,'no batches for '+adapter)
+            self.assertEqual(sum(len(names) for names in batches),6)  # every clip used exactly once
+            self.assertEqual(len({name for names in batches for name in names}),6)
+            self.assertEqual(batches,sample(adapter,7))  # the same pin gives the same batches
+            if adapter!='control42': self.assertEqual(batches,sample('control42',7))
+        # different epoch pins still give different samples, otherwise epochs would repeat one batch
+        drawn=[tuple(batch) for seed in (1,2,3,4,5,6) for batch in sample('gaps42',seed)]
+        self.assertGreater(len(set(drawn)),1)
+
+    def test_augmentation_works_without_a_pinned_generator_too(self):
+        # clip_tokens keeps a module generator for its augment decisions; handing the augment
+        # helpers the numpy.random module instead is the bug this guards.
+        from scripts.finetune_openfs_transfer import clip_tokens,training_batches
+        data=self.synthetic_data()
+        batches=list(training_batches(data,self.chars,'control42',2,60,augment=True,limit=6))
+        self.assertEqual(sum(len(row[4]) for row in batches),6)
+        for adapter in ('control42','gaps42','gaps91'):
+            self.assertIsNotNone(clip_tokens(data,0,adapter,augment=True))
+
+    def test_a_larger_frame_budget_puts_more_clips_in_each_batch(self):
+        from scripts.finetune_openfs_transfer import training_batches
+        data=self.synthetic_data()
+        small=list(training_batches(data,self.chars,'gaps42',16,20,rng=np.random.default_rng(1)))
+        large=list(training_batches(data,self.chars,'gaps42',16,10**6,rng=np.random.default_rng(1)))
+        self.assertEqual(sum(len(row[4]) for row in small),6)
+        self.assertEqual(sum(len(row[4]) for row in large),6)
+        self.assertGreater(len(small),len(large))
+        self.assertEqual(len(large),1)  # one clip per batch would need more frames than these hold
+
     def test_the_released_network_forwards_and_decodes_our_packed_tokens(self):
         from scripts.finetune_openfs_transfer import collate,decode,encode_text,load_released,window_tokens
         for adapter in ('control42','gaps42','gaps91'):
