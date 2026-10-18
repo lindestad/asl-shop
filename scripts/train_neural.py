@@ -1,9 +1,13 @@
 """Train/evaluate neural models from signer-disjoint landmark clip manifests."""
 import argparse
 import json
+import os
 from pathlib import Path
 import random
 import sys
+
+# Set before torch initializes its caching allocator; see scripts/train_openfs.py.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import numpy as np
 import torch
