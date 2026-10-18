@@ -597,6 +597,9 @@ def main():
                    help='published run to compare the control against: headline numbers plus per-clip examples')
     p.add_argument('--report',type=Path,default=ROOT/'data/transfer-teacher.report.json')
     p.add_argument('--merge-report',action='store_true',help='fold these results into an existing report file')
+    p.add_argument('--merge-reports',type=Path,nargs='*',default=[],
+                   help='report files from other runs of this script to fold into the written report; '
+                        'nothing is recomputed, the adapter blocks are copied and the deltas rebuilt')
     p.add_argument('--seed',type=int,default=42)
     p.add_argument('--device',default='cuda')
     p.add_argument('--force',action='store_true',help='replace an existing --output; throwaway runs only')
@@ -729,23 +732,43 @@ def main():
         del network
         if cuda: torch.cuda.empty_cache()
         report['adapters'][adapter]=block
-    published=args.published
+    compare(report,args.published)
+    report['peak_vram_mib']=round(peak_overall/2**20)
+    report['seconds']=round(time.perf_counter()-started,1)
+    if args.merge_reports:
+        for path in args.merge_reports:
+            merge_into(report,json.loads(path.read_text(encoding='utf-8')),str(path))
+        compare(report,args.published)
+    args.report.parent.mkdir(parents=True,exist_ok=True)
+    args.report.write_text(json.dumps(report,indent=2),encoding='utf-8')
+    print(json.dumps(dict(report=str(args.report),seconds=report['seconds'],peak_vram_mib=report['peak_vram_mib'],
+                          adapters=sorted(report['adapters']),
+                          control_vs_published=report['comparison'].get('control_vs_published'))),flush=True)
+
+
+def compare(report,published):
+    """Paired deltas: the same clips, the same weights, one thing changed at a time.  Run again
+    after merging so cross-adapter deltas appear even when the adapters ran in separate processes."""
+    comparison=report.setdefault('comparison',{})
+    for key in [key for key in comparison if key.endswith(('_minus_control42_released','_minus_control42_fine_tuned'))
+                or key.startswith('chunked_cost_')]:
+        del comparison[key]
     for stage in ('released','fine_tuned'):
         control=report['adapters'].get('control42',{}).get(stage,{}).get('full-clip')
         for adapter in report['adapters']:
-            block=report['adapters'][adapter][stage]
+            block=report['adapters'][adapter].get(stage,{})
             if not block.get('full-clip'): continue
             if adapter!='control42' and control:
-                key=f'{adapter}_minus_control42_{stage}'
-                report['comparison'][key]=deltas(control,block['full-clip'])
+                comparison[f'{adapter}_minus_control42_{stage}']=deltas(control,block['full-clip'])
             if block.get('chunked'):
-                report['comparison'].setdefault(f'chunked_cost_{stage}',{})[adapter]=\
-                    deltas(block['full-clip'],block['chunked'])
+                comparison.setdefault(f'chunked_cost_{stage}',{})[adapter]=deltas(block['full-clip'],
+                                                                                 block['chunked'])
     control=report['adapters'].get('control42',{}).get('released',{}).get('full-clip')
-    if control and 'cer' in published:
-        report['comparison']['control_vs_published']=dict(
+    if control and 'cer' in published and 'exact_sequence_accuracy' in published:
+        comparison['control_vs_published']=dict(
             cer_points=round(100*(published['cer']-control['cer']),3),
-            exact_sequence_points=round(100*(control['exact_sequence_accuracy']-published['exact_sequence_accuracy']),3),
+            exact_sequence_points=round(100*(control['exact_sequence_accuracy']-
+                                             published['exact_sequence_accuracy']),3),
             published=dict(cer=published['cer'],exact_sequence_accuracy=published['exact_sequence_accuracy'],
                            clips=published.get('clips'),characters=published.get('characters')),
             ours=dict(cer=round(control['cer'],5),letter_accuracy=round(control['letter_accuracy'],5),
@@ -753,12 +776,20 @@ def main():
                       clips=control['clips'],characters=control['characters']),
             note='both rows use the released weights on the FSboard test split, so the gap is our '
                  'pack plumbing plus decode-time sampling of the same clips')
-    report['peak_vram_mib']=round(peak_overall/2**20)
-    report['seconds']=round(time.perf_counter()-started,1)
-    args.report.parent.mkdir(parents=True,exist_ok=True)
-    args.report.write_text(json.dumps(report,indent=2),encoding='utf-8')
-    print(json.dumps(dict(report=str(args.report),seconds=report['seconds'],peak_vram_mib=report['peak_vram_mib'],
-                          control_vs_published=report['comparison'].get('control_vs_published'))),flush=True)
+
+
+def merge_into(report,other,label):
+    """Fold another run of this script into the report we are about to write, so one run per
+    adapter still produces one file.  Each run's own settings are kept under merged_from."""
+    for adapter,block in other.get('adapters',{}).items():
+        report['adapters'].setdefault(adapter,block)
+    merged=report.setdefault('merged_from',[])
+    if not any(row['report']==label for row in merged):
+        merged.append(dict(report=label,adapters=sorted(other.get('adapters',{})),
+                           evaluation=other.get('evaluation',{}),peak_vram_mib=other.get('peak_vram_mib'),
+                           seconds=other.get('seconds')))
+    report['commands']=report.get('commands',[])+[command for command in other.get('commands',[])
+                                                  if command not in report.get('commands',[])]
 
 
 def emit(adapter,stage,mode,summary):

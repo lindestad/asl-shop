@@ -473,5 +473,80 @@ class ReleasedCheckpointTests(unittest.TestCase):
         self.assertTrue((network.pose_embedding[0].weight.grad!=0).any())
 
 
+class ReportComparisonTests(unittest.TestCase):
+    """The merged report is what makes the three headline deltas readable, so compare and
+    merge_into are the parts worth pinning down."""
+
+    def block(self,cer,exact,deletions=10,substitutions=20,insertions=5):
+        return dict(cer=cer,letter_accuracy=1-cer,exact_sequence_accuracy=exact,
+                    deletions=deletions,substitutions=substitutions,insertions=insertions,
+                    deletion_rate=deletions/100,insertion_rate=insertions/100,
+                    clips=100,characters=100,errors=int(cer*100),seconds=1.)
+
+    def report(self):
+        return dict(adapters={
+            'control42':dict(released={'full-clip':self.block(.06,.59),'chunked':self.block(.075,.55,10,20,12)},
+                             fine_tuned={'full-clip':self.block(.05,.62),'chunked':self.block(.06,.58,10,20,11)}),
+            'gaps42':dict(released={'full-clip':self.block(.057,.60),'chunked':self.block(.071,.56,10,20,13)},
+                          fine_tuned={'full-clip':self.block(.048,.63),'chunked':self.block(.058,.59,10,20,12)}),
+        },comparison={})
+
+    def test_compare_reports_paired_deltas_for_every_stage_and_mode(self):
+        from scripts.finetune_openfs_transfer import compare
+        report=self.report()
+        compare(report,dict(cer=.06286748,exact_sequence_accuracy=.59324335,clips=12521,characters=221100))
+        self.maxDiff=None
+        # deltas(before, after) treats a positive cer_points as an improvement of after over before
+        self.assertEqual(report['comparison']['gaps42_minus_control42_released']['cer_points'],0.3)
+        self.assertEqual(report['comparison']['gaps42_minus_control42_fine_tuned']['cer_points'],0.2)
+        for stage in ('released','fine_tuned'):
+            cost=report['comparison'][f'chunked_cost_{stage}']['gaps42']
+            self.assertLess(cost['cer_points'],0)  # chunking never improves CER here
+            self.assertGreater(cost['insertion_change'],0)
+        control=report['comparison']['control_vs_published']
+        self.assertEqual(control['cer_points'],round(100*(.06286748-.06),3))
+        self.assertEqual(control['published']['clips'],12521)
+        self.assertEqual(control['ours']['clips'],100)
+
+    def test_compare_survives_a_missing_published_row_and_reruns_cleanly(self):
+        from scripts.finetune_openfs_transfer import compare
+        report=self.report()
+        compare(report,{})
+        self.assertNotIn('control_vs_published',report['comparison'])
+        compare(report,dict(cer=.06,exact_sequence_accuracy=.59))
+        self.assertIn('control_vs_published',report['comparison'])
+        keys=set(report['comparison'])
+        compare(report,dict(cer=.06,exact_sequence_accuracy=.59))  # merging re-runs compare
+        self.assertEqual(keys,set(report['comparison']))
+        self.assertEqual(report['comparison']['gaps42_minus_control42_released']['cer_points'],0.3)
+
+    def test_merging_a_gaps91_run_adds_cross_adapter_deltas(self):
+        from scripts.finetune_openfs_transfer import compare,merge_into
+        report=self.report()
+        gaps91=dict(adapters={'gaps91':dict(
+                        released={'full-clip':self.block(1.1,0.,9198,20955,8140),
+                                  'chunked':self.block(1.117,0.,8324,21734,8829)},
+                        fine_tuned={'full-clip':self.block(.09,.42),
+                                    'chunked':self.block(.10,.40)})},
+                    comparison={},commands=['python run gaps91'],peak_vram_mib=1602,seconds=3600,
+                    evaluation=dict(selection=dict(clips=2000,seed=42)))
+        merge_into(report,gaps91,'data/transfer-teacher-gaps91.report.json')
+        compare(report,dict(cer=.06286748,exact_sequence_accuracy=.59324335))
+        self.assertEqual(report['comparison']['gaps91_minus_control42_released']['cer_points'],
+                         round(100*(.06-1.1),3))
+        self.assertGreater(report['comparison']['gaps91_minus_control42_fine_tuned']['cer_points'],
+                           report['comparison']['gaps91_minus_control42_released']['cer_points'])
+        self.assertIn('gaps91',report['comparison']['chunked_cost_fine_tuned'])
+        merge_into(report,gaps91,'data/transfer-teacher-gaps91.report.json')  # idempotent
+        self.assertEqual(len(report['merged_from']),1)
+        self.assertEqual(report['commands'],['python run gaps91'])
+        self.assertEqual(report['merged_from'][0]['report'],'data/transfer-teacher-gaps91.report.json')
+        self.assertEqual(report['merged_from'][0]['adapters'],['gaps91'])
+        # the run that merges keeps its own adapter blocks; the merged file only adds missing ones
+        report['adapters']['gaps42']['released']['full-clip']['cer']=.999
+        merge_into(report,gaps91,'other.json')
+        self.assertEqual(report['adapters']['gaps42']['released']['full-clip']['cer'],.999)
+
+
 if __name__=='__main__':
     unittest.main()
