@@ -1,0 +1,706 @@
+{
+  "kind": "openfs-synthetic-metrics",
+  "date": "2026-10-19",
+  "licence": "OpenFS Non-Commercial Research License: commercial use of the source code, model checkpoints, or derivative works is prohibited. The owner ruled on 2026-10-19 that this project is research rather than commercial, so these rows are inside that licence; they stay research-only and out of any build with commercial intent",
+  "splits": {
+    "test": "packed FSboard test split for every row: 12,521 clips, 221,100 reference characters, greedy CTC, no dictionary or language correction"
+  },
+  "rows": [
+    {
+      "row": "baseline (shipped app checkpoint)",
+      "research_only": true,
+      "pack": "/home/coder/asl-data/openfs-packed",
+      "checkpoint": "/home/coder/asl-data/models/neural-2026-10-12/sequence.pt",
+      "test": {
+        "clips": 12521,
+        "characters": 221100,
+        "errors": 29940,
+        "exact": 2267,
+        "cer": 0.13541383989145184,
+        "letter_accuracy": 0.8645861601085482,
+        "exact_sequence_accuracy": 0.1810558262119639,
+        "deletions": 16819,
+        "substitutions": 6552,
+        "insertions": 6569,
+        "deletion_rate": 0.07606965174129353,
+        "substitution_rate": 0.029633649932157394,
+        "insertion_rate": 0.029710538218000904,
+        "length_clips": {
+          "1-4": 7,
+          "5+": 12514
+        },
+        "length_exact": {
+          "1-4": 5,
+          "5+": 2262
+        },
+        "length_accuracy": {
+          "1-4": 0.7142857142857143,
+          "5+": 0.18075755154227266
+        },
+        "length_cer": {
+          "1-4": 0.125,
+          "5+": 0.13541497041741302
+        }
+      },
+      "test_movement_letters": {
+        "clips": 1275,
+        "characters": 24844,
+        "errors": 3503,
+        "exact": 161,
+        "cer": 0.14099983899533086,
+        "letter_accuracy": 0.8590001610046691,
+        "exact_sequence_accuracy": 0.12627450980392158,
+        "deletions": 1982,
+        "substitutions": 740,
+        "insertions": 781,
+        "deletion_rate": 0.07977781355659314,
+        "substitution_rate": 0.02978586379004991,
+        "insertion_rate": 0.03143616164868781,
+        "length_clips": {
+          "1-4": 0,
+          "5+": 1275
+        },
+        "length_exact": {
+          "1-4": 0,
+          "5+": 161
+        },
+        "length_accuracy": {
+          "1-4": null,
+          "5+": 0.12627450980392158
+        },
+        "length_cer": {
+          "1-4": 0.0,
+          "5+": 0.14099983899533086
+        }
+      },
+      "test_single_letter": {
+        "clips": 1,
+        "characters": 1,
+        "errors": 0,
+        "exact": 1,
+        "cer": 0.0,
+        "letter_accuracy": 1.0,
+        "exact_sequence_accuracy": 1.0,
+        "deletions": 0,
+        "substitutions": 0,
+        "insertions": 0,
+        "deletion_rate": 0.0,
+        "substitution_rate": 0.0,
+        "insertion_rate": 0.0,
+        "length_clips": {
+          "1-4": 1,
+          "5+": 0
+        },
+        "length_exact": {
+          "1-4": 1,
+          "5+": 0
+        },
+        "length_accuracy": {
+          "1-4": 1.0,
+          "5+": null
+        },
+        "length_cer": {
+          "1-4": 0.0,
+          "5+": 0.0
+        }
+      }
+    },
+    {
+      "row": "real train only, retrained on the VPS",
+      "research_only": true,
+      "pack": "/home/coder/asl-data/openfs-packed",
+      "checkpoint": "/home/coder/asl-data/models/synthetic-baseline/sequence.pt",
+      "test": {
+        "clips": 12521,
+        "characters": 221100,
+        "errors": 30037,
+        "exact": 2289,
+        "cer": 0.1358525554047942,
+        "letter_accuracy": 0.8641474445952058,
+        "exact_sequence_accuracy": 0.18281287437105662,
+        "deletions": 17277,
+        "substitutions": 6399,
+        "insertions": 6361,
+        "deletion_rate": 0.07814111261872456,
+        "substitution_rate": 0.028941655359565808,
+        "insertion_rate": 0.028769787426503844,
+        "length_clips": {
+          "1-4": 7,
+          "5+": 12514
+        },
+        "length_exact": {
+          "1-4": 4,
+          "5+": 2285
+        },
+        "length_accuracy": {
+          "1-4": 0.5714285714285714,
+          "5+": 0.18259549304778647
+        },
+        "length_cer": {
+          "1-4": 0.16666666666666666,
+          "5+": 0.1358492102263475
+        }
+      },
+      "test_movement_letters": {
+        "clips": 1275,
+        "characters": 24844,
+        "errors": 3538,
+        "exact": 155,
+        "cer": 0.14240862985026564,
+        "letter_accuracy": 0.8575913701497344,
+        "exact_sequence_accuracy": 0.12156862745098039,
+        "deletions": 1999,
+        "substitutions": 770,
+        "insertions": 769,
+        "deletion_rate": 0.08046208340041862,
+        "substitution_rate": 0.03099339880856545,
+        "insertion_rate": 0.030953147641281598,
+        "length_clips": {
+          "1-4": 0,
+          "5+": 1275
+        },
+        "length_exact": {
+          "1-4": 0,
+          "5+": 155
+        },
+        "length_accuracy": {
+          "1-4": null,
+          "5+": 0.12156862745098039
+        },
+        "length_cer": {
+          "1-4": 0.0,
+          "5+": 0.14240862985026564
+        }
+      },
+      "test_single_letter": {
+        "clips": 1,
+        "characters": 1,
+        "errors": 0,
+        "exact": 1,
+        "cer": 0.0,
+        "letter_accuracy": 1.0,
+        "exact_sequence_accuracy": 1.0,
+        "deletions": 0,
+        "substitutions": 0,
+        "insertions": 0,
+        "deletion_rate": 0.0,
+        "substitution_rate": 0.0,
+        "insertion_rate": 0.0,
+        "length_clips": {
+          "1-4": 1,
+          "5+": 0
+        },
+        "length_exact": {
+          "1-4": 1,
+          "5+": 0
+        },
+        "length_accuracy": {
+          "1-4": 1.0,
+          "5+": null
+        },
+        "length_cer": {
+          "1-4": 0.0,
+          "5+": 0.0
+        }
+      },
+      "parameters": 835453,
+      "epochs": 30,
+      "training_seconds": 3205.76,
+      "best_validation_cer": 0.14141395085601094,
+      "gpu": "Tesla V100-SXM3-32GB"
+    },
+    {
+      "row": "real + 14,999 synthetic word clips",
+      "research_only": true,
+      "pack": "/home/coder/asl-wt/synthetic-generator/data/openfs-synthetic-packed-mix15k",
+      "checkpoint": "/home/coder/asl-data/models/synthetic-mix15k/sequence.pt",
+      "test": {
+        "clips": 12521,
+        "characters": 221100,
+        "errors": 30535,
+        "exact": 2157,
+        "cer": 0.13810492989597467,
+        "letter_accuracy": 0.8618950701040253,
+        "exact_sequence_accuracy": 0.17227058541650028,
+        "deletions": 17614,
+        "substitutions": 6534,
+        "insertions": 6387,
+        "deletion_rate": 0.07966530981456355,
+        "substitution_rate": 0.02955223880597015,
+        "insertion_rate": 0.028887381275440976,
+        "length_clips": {
+          "1-4": 7,
+          "5+": 12514
+        },
+        "length_exact": {
+          "1-4": 6,
+          "5+": 2151
+        },
+        "length_accuracy": {
+          "1-4": 0.8571428571428571,
+          "5+": 0.17188748601566245
+        },
+        "length_cer": {
+          "1-4": 0.08333333333333333,
+          "5+": 0.13811087589788126
+        }
+      },
+      "test_movement_letters": {
+        "clips": 1275,
+        "characters": 24844,
+        "errors": 3613,
+        "exact": 152,
+        "cer": 0.1454274673965545,
+        "letter_accuracy": 0.8545725326034455,
+        "exact_sequence_accuracy": 0.1192156862745098,
+        "deletions": 2063,
+        "substitutions": 763,
+        "insertions": 787,
+        "deletion_rate": 0.08303815810658509,
+        "substitution_rate": 0.03071164063757849,
+        "insertion_rate": 0.03167766865239092,
+        "length_clips": {
+          "1-4": 0,
+          "5+": 1275
+        },
+        "length_exact": {
+          "1-4": 0,
+          "5+": 152
+        },
+        "length_accuracy": {
+          "1-4": null,
+          "5+": 0.1192156862745098
+        },
+        "length_cer": {
+          "1-4": 0.0,
+          "5+": 0.1454274673965545
+        }
+      },
+      "test_single_letter": {
+        "clips": 1,
+        "characters": 1,
+        "errors": 0,
+        "exact": 1,
+        "cer": 0.0,
+        "letter_accuracy": 1.0,
+        "exact_sequence_accuracy": 1.0,
+        "deletions": 0,
+        "substitutions": 0,
+        "insertions": 0,
+        "deletion_rate": 0.0,
+        "substitution_rate": 0.0,
+        "insertion_rate": 0.0,
+        "length_clips": {
+          "1-4": 1,
+          "5+": 0
+        },
+        "length_exact": {
+          "1-4": 1,
+          "5+": 0
+        },
+        "length_accuracy": {
+          "1-4": 1.0,
+          "5+": null
+        },
+        "length_cer": {
+          "1-4": 0.0,
+          "5+": 0.0
+        }
+      },
+      "parameters": 835453,
+      "epochs": 30,
+      "training_seconds": 3611.21,
+      "best_validation_cer": 0.1431448379946234,
+      "gpu": "Tesla V100-SXM3-32GB",
+      "generation_quality": {
+        "clips": 62892,
+        "characters": 448755,
+        "errors": 421872,
+        "exact": 847,
+        "cer": 0.9400942607881806,
+        "letter_accuracy": 0.05990573921181941,
+        "exact_sequence_accuracy": 0.013467531641544234,
+        "deletions": 11167,
+        "substitutions": 29313,
+        "insertions": 381392,
+        "deletion_rate": 0.024884402402201647,
+        "substitution_rate": 0.06532072066049403,
+        "insertion_rate": 0.8498891377254849,
+        "length_clips": {
+          "1-4": 8190,
+          "5+": 54702
+        },
+        "length_exact": {
+          "1-4": 39,
+          "5+": 808
+        },
+        "length_accuracy": {
+          "1-4": 0.004761904761904762,
+          "5+": 0.014770940733428394
+        },
+        "length_cer": {
+          "1-4": 2.997973556574314,
+          "5+": 0.792128564706332
+        }
+      },
+      "generation_rule": "prefix",
+      "synthetic": {
+        "pack": "data/openfs-synthetic-packed-mix15k",
+        "synthetic_clips": 14999,
+        "synthetic_frames": 672152,
+        "words": 10771,
+        "per_set": {
+          "train": 14105,
+          "jz": 894
+        },
+        "seconds": 30.18,
+        "split_frames": {
+          "train": 26083259,
+          "validation": 2160110,
+          "test": 2487566
+        },
+        "maximum_abs_shape_coordinate": 15.38131046295166,
+        "maximum_abs_packed_coordinate": 15.38131046295166,
+        "rejected": {
+          "model_derived_quality_filter": 32128,
+          "coordinate_bound": 1
+        }
+      },
+      "roundtrip": {
+        "clips_checked": 14999,
+        "maximum_abs_error": 9.03010368347168e-06,
+        "atol": 1e-05,
+        "maximum_timeline_index_error_from_arange": 5.111098289489746e-06,
+        "note": "normalized_box(packed shape channels) reproduces the sampled x,y; the upstream divisor is per axis, so an isotropic rescale would miss frames whose x and y extents differ"
+      }
+    },
+    {
+      "row": "real + 30,762 synthetic word clips",
+      "research_only": true,
+      "pack": "/home/coder/asl-wt/synthetic-generator/data/openfs-synthetic-packed-mixall",
+      "checkpoint": "/home/coder/asl-data/models/synthetic-mixall/sequence.pt",
+      "test": {
+        "clips": 12521,
+        "characters": 221100,
+        "errors": 30644,
+        "exact": 2120,
+        "cer": 0.13859791949344188,
+        "letter_accuracy": 0.8614020805065581,
+        "exact_sequence_accuracy": 0.16931554987620798,
+        "deletions": 17267,
+        "substitutions": 6607,
+        "insertions": 6770,
+        "deletion_rate": 0.0780958842152872,
+        "substitution_rate": 0.029882406151062867,
+        "insertion_rate": 0.030619629127091815,
+        "length_clips": {
+          "1-4": 7,
+          "5+": 12514
+        },
+        "length_exact": {
+          "1-4": 5,
+          "5+": 2115
+        },
+        "length_accuracy": {
+          "1-4": 0.7142857142857143,
+          "5+": 0.16901070800703213
+        },
+        "length_cer": {
+          "1-4": 0.125,
+          "5+": 0.13859939568293256
+        }
+      },
+      "test_movement_letters": {
+        "clips": 1275,
+        "characters": 24844,
+        "errors": 3604,
+        "exact": 165,
+        "cer": 0.14506520689099983,
+        "letter_accuracy": 0.8549347931090001,
+        "exact_sequence_accuracy": 0.12941176470588237,
+        "deletions": 1989,
+        "substitutions": 796,
+        "insertions": 819,
+        "deletion_rate": 0.0800595717275801,
+        "substitution_rate": 0.03203992915794558,
+        "insertion_rate": 0.03296570600547416,
+        "length_clips": {
+          "1-4": 0,
+          "5+": 1275
+        },
+        "length_exact": {
+          "1-4": 0,
+          "5+": 165
+        },
+        "length_accuracy": {
+          "1-4": null,
+          "5+": 0.12941176470588237
+        },
+        "length_cer": {
+          "1-4": 0.0,
+          "5+": 0.14506520689099983
+        }
+      },
+      "test_single_letter": {
+        "clips": 1,
+        "characters": 1,
+        "errors": 0,
+        "exact": 1,
+        "cer": 0.0,
+        "letter_accuracy": 1.0,
+        "exact_sequence_accuracy": 1.0,
+        "deletions": 0,
+        "substitutions": 0,
+        "insertions": 0,
+        "deletion_rate": 0.0,
+        "substitution_rate": 0.0,
+        "insertion_rate": 0.0,
+        "length_clips": {
+          "1-4": 1,
+          "5+": 0
+        },
+        "length_exact": {
+          "1-4": 1,
+          "5+": 0
+        },
+        "length_accuracy": {
+          "1-4": 1.0,
+          "5+": null
+        },
+        "length_cer": {
+          "1-4": 0.0,
+          "5+": 0.0
+        }
+      },
+      "parameters": 835453,
+      "epochs": 30,
+      "training_seconds": 3556.13,
+      "best_validation_cer": 0.14475310097627694,
+      "gpu": "Tesla V100-SXM3-32GB",
+      "generation_quality": {
+        "clips": 62892,
+        "characters": 448755,
+        "errors": 421872,
+        "exact": 847,
+        "cer": 0.9400942607881806,
+        "letter_accuracy": 0.05990573921181941,
+        "exact_sequence_accuracy": 0.013467531641544234,
+        "deletions": 11167,
+        "substitutions": 29313,
+        "insertions": 381392,
+        "deletion_rate": 0.024884402402201647,
+        "substitution_rate": 0.06532072066049403,
+        "insertion_rate": 0.8498891377254849,
+        "length_clips": {
+          "1-4": 8190,
+          "5+": 54702
+        },
+        "length_exact": {
+          "1-4": 39,
+          "5+": 808
+        },
+        "length_accuracy": {
+          "1-4": 0.004761904761904762,
+          "5+": 0.014770940733428394
+        },
+        "length_cer": {
+          "1-4": 2.997973556574314,
+          "5+": 0.792128564706332
+        }
+      },
+      "generation_rule": "prefix",
+      "synthetic": {
+        "pack": "data/openfs-synthetic-packed-mixall",
+        "synthetic_clips": 30762,
+        "synthetic_frames": 1373466,
+        "words": 15433,
+        "per_set": {
+          "jz": 1828,
+          "train": 28934
+        },
+        "seconds": 35.49,
+        "split_frames": {
+          "train": 26784573,
+          "validation": 2160110,
+          "test": 2487566
+        },
+        "maximum_abs_shape_coordinate": 15.38131046295166,
+        "maximum_abs_packed_coordinate": 15.38131046295166,
+        "rejected": {
+          "model_derived_quality_filter": 32128,
+          "coordinate_bound": 2
+        }
+      },
+      "roundtrip": {
+        "clips_checked": 30762,
+        "maximum_abs_error": 9.03010368347168e-06,
+        "atol": 1e-05,
+        "maximum_timeline_index_error_from_arange": 5.163252353668213e-06,
+        "note": "normalized_box(packed shape channels) reproduces the sampled x,y; the upstream divisor is per axis, so an isotropic rescale would miss frames whose x and y extents differ"
+      }
+    },
+    {
+      "row": "real + 386 synthetic single-letter clips",
+      "research_only": true,
+      "pack": "/home/coder/asl-wt/synthetic-generator/data/openfs-synthetic-packed-letters",
+      "checkpoint": "/home/coder/asl-data/models/synthetic-mixletters/sequence.pt",
+      "test": {
+        "clips": 12521,
+        "characters": 221100,
+        "errors": 29748,
+        "exact": 2289,
+        "cer": 0.13454545454545455,
+        "letter_accuracy": 0.8654545454545455,
+        "exact_sequence_accuracy": 0.18281287437105662,
+        "deletions": 16994,
+        "substitutions": 6318,
+        "insertions": 6436,
+        "deletion_rate": 0.07686114880144732,
+        "substitution_rate": 0.028575305291723203,
+        "insertion_rate": 0.029109000452284036,
+        "length_clips": {
+          "1-4": 7,
+          "5+": 12514
+        },
+        "length_exact": {
+          "1-4": 4,
+          "5+": 2285
+        },
+        "length_accuracy": {
+          "1-4": 0.5714285714285714,
+          "5+": 0.18259549304778647
+        },
+        "length_cer": {
+          "1-4": 0.16666666666666666,
+          "5+": 0.134541967468201
+        }
+      },
+      "test_movement_letters": {
+        "clips": 1275,
+        "characters": 24844,
+        "errors": 3459,
+        "exact": 175,
+        "cer": 0.13922878763484142,
+        "letter_accuracy": 0.8607712123651585,
+        "exact_sequence_accuracy": 0.13725490196078433,
+        "deletions": 1986,
+        "substitutions": 740,
+        "insertions": 733,
+        "deletion_rate": 0.07993881822572854,
+        "substitution_rate": 0.02978586379004991,
+        "insertion_rate": 0.029504105619062953,
+        "length_clips": {
+          "1-4": 0,
+          "5+": 1275
+        },
+        "length_exact": {
+          "1-4": 0,
+          "5+": 175
+        },
+        "length_accuracy": {
+          "1-4": null,
+          "5+": 0.13725490196078433
+        },
+        "length_cer": {
+          "1-4": 0.0,
+          "5+": 0.13922878763484142
+        }
+      },
+      "test_single_letter": {
+        "clips": 1,
+        "characters": 1,
+        "errors": 0,
+        "exact": 1,
+        "cer": 0.0,
+        "letter_accuracy": 1.0,
+        "exact_sequence_accuracy": 1.0,
+        "deletions": 0,
+        "substitutions": 0,
+        "insertions": 0,
+        "deletion_rate": 0.0,
+        "substitution_rate": 0.0,
+        "insertion_rate": 0.0,
+        "length_clips": {
+          "1-4": 1,
+          "5+": 0
+        },
+        "length_exact": {
+          "1-4": 1,
+          "5+": 0
+        },
+        "length_accuracy": {
+          "1-4": 1.0,
+          "5+": null
+        },
+        "length_cer": {
+          "1-4": 0.0,
+          "5+": 0.0
+        }
+      },
+      "parameters": 835453,
+      "epochs": 30,
+      "training_seconds": 3296.09,
+      "best_validation_cer": 0.1410790925812385,
+      "gpu": "Tesla V100-SXM3-32GB",
+      "generation_quality": {
+        "clips": 624,
+        "characters": 624,
+        "errors": 12267,
+        "exact": 2,
+        "cer": 19.658653846153847,
+        "letter_accuracy": -18.658653846153847,
+        "exact_sequence_accuracy": 0.003205128205128205,
+        "deletions": 0,
+        "substitutions": 133,
+        "insertions": 12134,
+        "deletion_rate": 0.0,
+        "substitution_rate": 0.21314102564102563,
+        "insertion_rate": 19.44551282051282,
+        "length_clips": {
+          "1-4": 624,
+          "5+": 0
+        },
+        "length_exact": {
+          "1-4": 2,
+          "5+": 0
+        },
+        "length_accuracy": {
+          "1-4": 0.003205128205128205,
+          "5+": null
+        },
+        "length_cer": {
+          "1-4": 19.658653846153847,
+          "5+": 0.0
+        }
+      },
+      "generation_rule": "prefix",
+      "synthetic": {
+        "pack": "data/openfs-synthetic-packed-letters",
+        "synthetic_clips": 386,
+        "synthetic_frames": 2386,
+        "words": 26,
+        "per_set": {
+          "letters": 386
+        },
+        "seconds": 22.95,
+        "split_frames": {
+          "train": 25413493,
+          "validation": 2160110,
+          "test": 2487566
+        },
+        "maximum_abs_shape_coordinate": 2.0527455806732178,
+        "maximum_abs_packed_coordinate": 2.0527455806732178,
+        "rejected": {
+          "model_derived_quality_filter": 238
+        }
+      },
+      "roundtrip": {
+        "clips_checked": 386,
+        "maximum_abs_error": 3.039836883544922e-06,
+        "atol": 1e-05,
+        "maximum_timeline_index_error_from_arange": 4.6938657760620117e-07,
+        "note": "normalized_box(packed shape channels) reproduces the sampled x,y; the upstream divisor is per axis, so an isotropic rescale would miss frames whose x and y extents differ"
+      }
+    }
+  ]
+}

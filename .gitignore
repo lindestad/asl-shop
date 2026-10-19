@@ -232,8 +232,9 @@ __marimo__/
 /model/*.npz
 /model/pca_letters.png
 
-# Frontend and desktop build artifacts
-node_modules/
+# Frontend and desktop build artifacts. No trailing slash: a linked worktree
+# symlinks node_modules to the main checkout, and a symlink is a file to git.
+node_modules
 dist/
 release/
 test-results/
