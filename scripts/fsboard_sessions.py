@@ -97,10 +97,12 @@ def reconstruct_landmarks(rows,*,width=640,height=480):
     """Packed 91-column rows back into normalized 21 x 3 tracks and presence masks.
 
     The pack stores wrist-relative, hand-size-normalized shape coordinates (mirrored for a Left hand) plus
-    the wrist position in hand-size units. Adding the wrist back gives points in hand-size units, and
-    dividing by one isotropic factor keeps that relationship: the live path rescales by wrist and hand size
-    again, so shape_features() and the sequence wrist columns come back identical. The factor is chosen so
-    the hand fits inside the frame the session claims.
+    the wrist position in hand-size units. Adding the wrist back gives a hand layout in hand-size pixel
+    units: shape and wrist columns were both divided by the same scalar |pinky-base − wrist|, so their sum
+    is only an isotropic rescaling of the original pixels. Putting that sum into normalized coordinates
+    means dividing x and y by the frame size, and then frame_features() multiplies by [width,height] again,
+    which cancels: shape_features() and the wrist columns come back identical. The pixel scale is chosen
+    so the hand fits inside the frame the session claims.
     """
     rows=np.asarray(rows,dtype=np.float32)
     present=np.zeros((rows.shape[0],2),dtype=np.uint8); built=[]; extents=[]
@@ -116,10 +118,11 @@ def reconstruct_landmarks(rows,*,width=640,height=480):
         built.append(points); present[:,slot]=detected
         if detected.any():
             seen=points[detected]
-            extents.append(max(float(np.ptp(seen[...,0])),float(np.ptp(seen[...,1]))))
-    span=max(extents) if extents else 1.0
-    scale=max(span/max(width,height),1e-6)*1.6  # keep the reconstructed hand inside the nominal frame
-    right,left=(np.dstack((points/scale,np.zeros((len(rows),21,1),dtype=np.float32))) for points in built)
+            extents.append((float(np.ptp(seen[...,0])),float(np.ptp(seen[...,1]))))
+    widest,tallest=(np.max(np.asarray(extents),axis=0) if extents else (1.0,1.0))
+    pixels=max(min(width/max(widest,1e-6),height/max(tallest,1e-6)),1e-6)*.6  # hand-size units to pixels
+    right,left=(np.dstack((points*pixels/np.array([width,height],dtype=np.float32),
+                           np.zeros((len(rows),21,1),dtype=np.float32))) for points in built)
     return right,left,present
 
 
