@@ -302,23 +302,26 @@ def load_teacher(args):
     provenance=dict(kind=None,representation=args.teacher_input_representation,
                     positions=args.teacher_positions,channels=None,paths={})
     source=None
+    classifier_module=None
+    import importlib
+    import yaml
     if args.openfs_source:
         source=Path(args.openfs_source).resolve()
         if not (source/'lib/models/recognizer.py').is_file():
             raise ValueError('OpenFS source checkout is missing lib/models/recognizer.py.')
+        # the released frame-classifier constructor is needed even when the recogniser side is one
+        # of our own checkpoints, so it is imported here, not inside the released-checkpoint branch
+        sys.path.insert(0,str(source))
+        classifier_module=importlib.import_module('lib.models.frame_classifier')
+        if Path(classifier_module.__file__).resolve()!=(source/'lib/models/frame_classifier.py').resolve():
+            raise ValueError(f'Another OpenFS module is already loaded: {classifier_module.__file__}')
     if teacher.is_dir():
         if not source or not args.trusted_teacher:
             raise ValueError('The released teacher needs --openfs-source and --trusted-teacher; it is '
                              'research-only and must never reach app code.')
-        import importlib
-        import yaml
-        sys.path.insert(0,str(source))
         recognizer=importlib.import_module('lib.models.recognizer')
-        classifier_module=importlib.import_module('lib.models.frame_classifier')
-        for module,relative in ((recognizer,'lib/models/recognizer.py'),
-                                (classifier_module,'lib/models/frame_classifier.py')):
-            if Path(module.__file__).resolve()!=(source/relative).resolve():
-                raise ValueError(f'Another OpenFS module is already loaded: {module.__file__}')
+        if Path(recognizer.__file__).resolve()!=(source/'lib/models/recognizer.py').resolve():
+            raise ValueError(f'Another OpenFS module is already loaded: {recognizer.__file__}')
         config=yaml.safe_load((teacher/'.hydra/config.yaml').read_text(encoding='utf-8'))
         if config['decode']['chars']!=UPSTREAM_CHARS:
             raise ValueError('Teacher checkpoint vocabulary does not match the packed label vocabulary.')

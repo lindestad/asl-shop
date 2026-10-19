@@ -279,6 +279,28 @@ class TeacherPayload(unittest.TestCase):
         self.assertNotIn('app model', message)
         self.assertIn('frame classifier checkpoint is missing', message)    # the task guard passed
 
+    def test_a_file_teacher_without_openfs_source_names_the_classifier_gap(self):
+        # the released frame-classifier constructor is imported even for a file-path teacher,
+        # which used to raise UnboundLocalError instead of naming the missing --openfs-source
+        s = load_script()
+        sys.path.insert(0, str(REPO))
+        from model.offline_recognizer import Recognizer
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'recognizer.pt'
+            network = Recognizer(input_dim=91, d_model=8, heads=2, layers=1, feedforward=16)
+            torch.save(dict(contract=s.CONTRACT, task='recognizer', representation='gaps',
+                            architecture=dict(input_dim=91, d_model=8, heads=2, layers=1,
+                                              feedforward=16, dropout=0.1),
+                            state_dict=network.state_dict()), path)
+            classifier = Path(directory) / 'frame_classifier'
+            classifier.mkdir()
+            (classifier / 'best_model.pth').write_bytes(b'not a checkpoint')     # weights present
+            args = self._args(path)
+            args.frame_classifier = classifier
+            with self.assertRaises(ValueError) as caught:
+                s.load_teacher(args)
+        self.assertIn('--openfs-source', str(caught.exception))
+
     def test_app_sequence_checkpoints_are_still_refused_as_teachers(self):
         s = load_script()
         with tempfile.TemporaryDirectory() as directory:
