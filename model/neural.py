@@ -68,13 +68,16 @@ class CausalBlock(nn.Module):
 
 
 class FingerspellingNet(nn.Module):
-    """Causal temporal CNN; every output sees at most the preceding 60 frames."""
-    def __init__(self, hidden=128):
+    """Causal temporal CNN; the dilation stack sets how many frames of history each output sees
+    (1 + sum(4 * dilation) for these 5-tap causal blocks, i.e. 61 frames for the default stack).
+    `dilations` is additive and defaults to the shipped stack, so old checkpoints are unchanged."""
+    def __init__(self, hidden=128, dilations=(1, 2, 4, 8)):
         super().__init__()
+        self.dilations = tuple(int(d) for d in dilations)
         self.hand_encoder = nn.Sequential(*list(HandshapeNet(hidden).network.children())[:-1])
         self.hand_gate = nn.Linear(hidden, 1)
         self.input = nn.Linear(hidden + 7, hidden)
-        self.blocks = nn.Sequential(*[CausalBlock(hidden, dilation) for dilation in (1, 2, 4, 8)])
+        self.blocks = nn.Sequential(*[CausalBlock(hidden, dilation) for dilation in self.dilations])
         self.output = nn.Linear(hidden, len(VOCAB))
 
     def forward(self, frames):
@@ -106,7 +109,10 @@ def load_checkpoint(path, task):
     labels = HANDSHAPES if task == "handshape" else VOCAB
     if checkpoint.get("labels") != labels:
         raise ValueError("Checkpoint vocabulary differs from the runtime vocabulary.")
-    network = (HandshapeNet if task == "handshape" else FingerspellingNet)(checkpoint["hidden"])
+    if task == "handshape":
+        network = HandshapeNet(checkpoint["hidden"])
+    else:
+        network = FingerspellingNet(checkpoint["hidden"], checkpoint.get("dilations") or (1, 2, 4, 8))
     network.load_state_dict(checkpoint["state_dict"], strict=True)
     network.eval()
     return network
