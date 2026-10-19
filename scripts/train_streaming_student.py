@@ -36,22 +36,27 @@ teacher posteriors restricted to frames where the teacher holds a letter (--dist
 distills blank/nothing frames).  --no-distill drops the KL term, --no-frame-labels drops the
 per-frame loss entirely, so the two ablations isolate soft labels and teacher frame labels.
 
-Real runs (VPS V100-SXM3; 61 frames reproduces the shipped model's parameter count exactly, so the
-distill/no-distill pair is a fixed-latency comparison).  Headline teacher pairing: our own
-gaps-timeline recogniser (data/models/openfs-recognizer-gaps/recognizer.pt, validation CER 7.08%)
-consumes the same 91-channel gap-preserving timeline as the student, so teacher posteriors land on
-packed rows directly and the compressed<->gaps index mapping is not exercised; the released
-checkpoint with --teacher-input-representation compressed is the tested alternative that does
-exercise it.  Same --seed and --limit-clips make the two 61-frame arms see identical clips:
+Real runs (VPS V100-SXM3; per-row accuracy and latency in docs/streaming-latency-2026-10-19.md; 61
+frames reproduces the shipped model's parameter count exactly, so the distill/no-distill pair is a
+fixed-latency comparison).  The pairing that produced usable supervision is the released checkpoint
+with --teacher-input-representation compressed, which needs --openfs-source and --trusted-teacher
+and does exercise the compressed<->gaps index mapping.  Our own gaps-timeline recogniser
+(data/models/openfs-recognizer-gaps/recognizer.pt, validation CER 7.08%) consumes the same 91-channel
+gap-preserving timeline as the student, so its posteriors would land on packed rows directly, but a
+probe through this harness found them unusable: argmax over 200 training clips decoded to 95.6% CER,
+almost all blank frames, against 15.0% for the released compressed teacher on the same clips.  That
+recogniser's wiring (--teacher-input-representation gaps --teacher-channels 91 --teacher-positions
+timeline) is unit-tested; its input preprocessing is not, so check it before distilling from it.
+Same --seed and --limit-clips make the two 61-frame arms see identical clips:
 
-  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --refined-labels data/openfs-refined --teacher data/models/openfs-recognizer-gaps/recognizer.pt --teacher-input-representation gaps --teacher-channels 91 --teacher-positions auto --frame-classifier data/openfs-checkpoints/frame_classifier_fsboard --openfs-source data/external/openfs/source --teacher-cache data/streaming-student-teacher-gaps.npz --receptive-frames 61 --limit-clips 20000 --epochs 30 --output data/models/streaming-student-rf61-distill/student.pt --report data/streaming-student-rf61-distill.report.json
+  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --refined-labels data/openfs-refined --teacher data/openfs-checkpoints/recognizer_fsboard --trusted-teacher --teacher-input-representation compressed --frame-classifier data/openfs-checkpoints/frame_classifier_fsboard --openfs-source data/external/openfs/source --teacher-cache data/models/streaming-student-rf61-distill/teacher-posteriors.npz --receptive-frames 61 --limit-clips 20000 --epochs 30 --output data/models/streaming-student-rf61-distill/student.pt --report data/streaming-student-rf61-distill.report.json
   .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --refined-labels data/openfs-refined --no-distill --receptive-frames 61 --limit-clips 20000 --epochs 30 --output data/models/streaming-student-rf61-nodelearn/student.pt --report data/streaming-student-rf61-nodelearn.report.json
-  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --refined-labels data/openfs-refined --teacher data/models/openfs-recognizer-gaps/recognizer.pt --teacher-input-representation gaps --teacher-channels 91 --teacher-positions auto --frame-classifier data/openfs-checkpoints/frame_classifier_fsboard --openfs-source data/external/openfs/source --teacher-cache data/streaming-student-teacher-gaps.npz --receptive-frames 200 600 --limit-clips 20000 --epochs 30 --output data/models/streaming-student-sweep/student.pt --report data/streaming-student-sweep.report.json
+  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --refined-labels data/openfs-refined --teacher data/openfs-checkpoints/recognizer_fsboard --trusted-teacher --teacher-input-representation compressed --frame-classifier data/openfs-checkpoints/frame_classifier_fsboard --openfs-source data/external/openfs/source --teacher-cache data/models/streaming-student-rf61-distill/teacher-posteriors.npz --receptive-frames 200 600 --limit-clips 20000 --epochs 30 --output data/models/streaming-student-sweep/student.pt --report data/streaming-student-sweep.report.json
 
 Evaluate an existing student (same metric path, no training) and merge rows into one table:
 
-  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --evaluate-checkpoint data/sequence.pt --report data/streaming-student-baseline.report.json
-  .venv/bin/python scripts/train_streaming_student.py --summarize baseline:data/streaming-student-baseline.report.json:data/runtime-latency.json --summarize rf61:data/streaming-student-61.report.json:data/streaming-latency-61.json --report data/streaming-latency.report.json
+  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --evaluate-checkpoint data/models/neural-2026-10-12/sequence.pt --report data/streaming-student-baseline.report.json
+  .venv/bin/python scripts/train_streaming_student.py --summarize baseline:data/streaming-student-baseline.report.json:data/streaming-latency-baseline.benchmark.json --summarize rf61-distill:data/streaming-student-rf61-distill.report.json:data/streaming-latency-rf61-distill.benchmark.json --report data/streaming-latency.report.json
 
 CPU latency itself is never measured here: scripts/benchmark_neural.py --sequence <student.pt>
 times the real streaming path and its json is what --summarize reads.

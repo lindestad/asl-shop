@@ -12,7 +12,9 @@ pin the properties the accuracy-versus-latency result rests on:
 - wall-clock latency is measured only by scripts/benchmark_neural.py, which really does accept a
   student checkpoint through the live streaming runtime;
 - a whole study run end to end on synthetic packed clips: checkpoint naming, report columns, the
-  research_only/distilled_from provenance, evaluate-only mode and the merged summary table.
+  research_only/distilled_from provenance, evaluate-only mode and the merged summary table;
+- the published study artifacts in docs/ stay arithmetically self-consistent and agree with the
+  writeup they summarise.
 
 The released teacher constructors live in the pinned upstream checkout and the weights are not in
 this repo, so load_teacher/teacher_posteriors themselves are exercised on the VPS, not here.
@@ -784,6 +786,64 @@ class StudyPipeline(unittest.TestCase):
             self.assertEqual(second['receptive_field_frames'], 61)
             self.assertEqual(second['cer'], 0.13)
             self.assertIsNone(second.get('arrival_p50_ms_best'))   # no benchmark file given
+
+
+class PublishedMeasurements(unittest.TestCase):
+    """The 2026-10-19 study artifacts in docs/ are the answer to the accuracy-versus-latency
+    question, so they are checked against themselves: rows internally consistent, the
+    fixed-latency pair actually fixed-latency, and the prose table agreeing with the JSON."""
+
+    METRICS = REPO / 'docs' / 'streaming-latency-metrics-2026-10-19.json'
+    NOTES = REPO / 'docs' / 'streaming-latency-2026-10-19.md'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.document = json.loads(cls.METRICS.read_text(encoding='utf-8'))
+        cls.rows = {row['config']: row for row in cls.document['rows']}
+
+    def test_every_row_is_arithmetic_that_adds_up(self):
+        self.assertEqual(len(self.document['rows']), 5)
+        for config, row in self.rows.items():
+            with self.subTest(config=config):
+                errors = row['deletions'] + row['substitutions'] + row['insertions']
+                self.assertAlmostEqual(row['cer'] * row['characters'], errors, delta=1.0)
+                self.assertAlmostEqual(row['letter_accuracy'], 1 - row['cer'], places=9)
+                self.assertAlmostEqual(row['deletion_rate'] * row['characters'],
+                                       row['deletions'], delta=1.0)
+                self.assertEqual(row['clips'], 12521)               # the packed FSboard test split
+                self.assertEqual(row['characters'], 221100)
+                self.assertEqual(row['buffered_model_frames_required'],
+                                 row['receptive_field_frames'])
+                self.assertIsNotNone(row['arrival_p50_ms_best'])    # every row is priced
+
+    def test_the_fixed_latency_pair_differs_only_by_the_kl_term(self):
+        distilled, plain = self.rows['rf61-distill'], self.rows['rf61-no-distill']
+        for field in ('parameters', 'dilations', 'receptive_field_frames',
+                      'buffered_model_frames_required', 'algorithmic_latency_ms_at_15hz'):
+            self.assertEqual(distilled[field], plain[field], field)
+        self.assertTrue(distilled['distillation'])
+        self.assertFalse(plain['distillation'])
+        # same architecture and shape, so per-arrival CPU cost cannot differ by construction
+        self.assertLess(abs(distilled['arrival_p50_ms_best'] - plain['arrival_p50_ms_best']), .5)
+        self.assertLess(plain['cer'], distilled['cer'])             # measured: distillation cost CER
+
+    def test_longer_history_costs_time_and_bought_nothing_in_accuracy(self):
+        arms = [self.rows[name] for name in ('rf61-distill', 'rf201-distill', 'rf601-distill')]
+        buffered = [row['buffered_model_frames_required'] for row in arms]
+        self.assertEqual(buffered, [61, 201, 601])
+        self.assertEqual([row['arrival_p50_ms_best'] for row in arms],
+                         sorted(row['arrival_p50_ms_best'] for row in arms))
+        for row, frames in zip(arms, buffered):
+            self.assertAlmostEqual(row['history_ms_on_model_grid'], frames * 1000 / 30, delta=50)
+        widest, narrowest = arms[-1], arms[0]
+        self.assertLess(abs(widest['cer'] - narrowest['cer']), .01)  # flat across a 10x field
+
+    def test_the_writeup_table_matches_the_machine_readable_rows(self):
+        notes = self.NOTES.read_text(encoding='utf-8')
+        for config, row in self.rows.items():
+            with self.subTest(config=config):
+                self.assertIn(f"{row['cer'] * 100:.2f}", notes)
+                self.assertIn(f"{row['arrival_p50_ms_best']:.2f}", notes)
 
 
 if __name__ == '__main__':
