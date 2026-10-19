@@ -41,11 +41,12 @@ extents, so an isotropic rescale - the bug class fixed last week in
 scripts/fsboard_sessions.py::reconstruct_landmarks - only shows up on frames whose x and y extents
 differ, which is most of them.
 
-Quality filter: clips whose released-recognizer transcription is not the exact word are dropped
-before packing unless --keep-rejected is passed. That filter is model-derived, computed by a
+Quality filter: clips whose released-recognizer transcription fails the generation's own match rule
+(exact word, or word-prefix when the greedy decoder rambles past a word it read correctly) are
+dropped before packing unless --keep-rejected is passed. That filter is model-derived, computed by a
 research checkpoint, not a human check, and it biases the kept set toward poses the released
-recognizer can already read. Kept/dropped counts and the recognition-on-generated CER are copied
-into the pack manifest.
+recognizer can already read. Kept/dropped counts, the rule each generation used and the
+recognition-on-generated CER are copied into the pack manifest.
 
 Commands (pilot first, then the real corpus; see docs/synthetic-data-2026-10-19.md):
 
@@ -314,9 +315,13 @@ def main():
                                  roundtrip=roundtrip,
                                  selection=dict(generated=generated, candidates=len(candidates), packed=len(kept),
                                                 limit=args.limit_clips, seed=args.seed, dropped=dict(rejected),
-                                                quality_filter='model-derived quality filter: the released '
-                                                               'recognizer transcribes each generated clip and '
-                                                               'only an exact word match is kept; not a human check')),
+                                                quality_filter='model-derived quality filter: the released recognizer '
+                                                               "transcribes each generated clip and the generation's "
+                                                               'own match rule keeps it (exact or prefix, recorded '
+                                                               'per generation); not a human check',
+                                                quality_rules=sorted(generation['provenance']['quality_filter']
+                                                                     .get('rule', 'exact')
+                                                                     for generation in generations))),
                   provenance=dict(generators=[generation['provenance'] for generation in generations]),
                   partitions=[])
 

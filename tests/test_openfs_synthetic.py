@@ -302,6 +302,21 @@ class WordChoice(unittest.TestCase):
         self.assertTrue(set(small) <= set(large))
 
 
+class QualityRules(unittest.TestCase):
+    """Both keep rules are honest about what the greedy released decoder does to generated clips."""
+
+    def test_exact_rejects_a_word_the_decoder_rambles_past_and_prefix_accepts_it(self):
+        from scripts.generate_openfs_synthetic import accepted_by
+        self.assertTrue(accepted_by('exact', 'CAMIONES', 'CAMIONES'))
+        self.assertFalse(accepted_by('exact', 'CAMIONES', 'CAMIONES BRING'))
+        self.assertTrue(accepted_by('prefix', 'CAMIONES', 'CAMIONES BRING'))
+        self.assertTrue(accepted_by('prefix', 'J', 'J------'))
+        self.assertFalse(accepted_by('prefix', 'J', 'AJ'))
+        self.assertFalse(accepted_by('prefix', '', ''))
+        with self.assertRaises(ValueError):
+            accepted_by('regex', 'J', 'J')
+
+
 class PackerContract(unittest.TestCase):
     """Manifest keys, the synthetic flag, the quality filter's bookkeeping and the round trip gate."""
 
@@ -341,6 +356,7 @@ class PackerContract(unittest.TestCase):
         self.assertEqual(len(clips), 3)
         self.assertEqual(manifest['synthetic']['selection']['packed'], 3)
         self.assertIn('model-derived quality filter', manifest['synthetic']['selection']['quality_filter'])
+        self.assertEqual(manifest['synthetic']['selection']['quality_rules'], ['exact'])
         self.assertIn('arange', manifest['timeline'])
         self.assertEqual(manifest['partitions'][0]['signers'], ['synthetic'])
         self.assertLess(manifest['synthetic']['roundtrip']['maximum_abs_error'], 1e-5)

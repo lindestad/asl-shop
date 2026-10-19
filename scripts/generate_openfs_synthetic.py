@@ -13,6 +13,11 @@ recognizer: lib.models.generator_df.EncoderTransformer embeds frame_label plus f
 recognizer named in the checkpoint's .hydra/config.yaml is loaded only to transcribe each generated
 clip. That transcription is this script's automatic keep/drop signal, so it is a model-derived
 quality filter, never a human check, and any kept pack inherits the released recognizer's biases.
+The transcription rule is --quality-rule: exact (the whole transcription is the word) or prefix (it
+starts with the word). The released decoder is greedy at max_len=32 and frequently never emits EOS
+on generated poses, so it appends hallucinated characters after a word it read correctly; exact
+keeps only 4% of clips overall and almost nothing on single letters, which would hollow out the
+J/Z experiment. Both rates are always reported, whichever rule kept the pack.
 
 The released code is imported, not reimplemented: lib.models.diffusion.Diffusion.sampling (ddim,
 50 steps of a T=1000 cosine schedule), lib.models.generator_df.EncoderTransformer,
@@ -36,11 +41,11 @@ Real runs (word choice is documented in the provenance file and in
 docs/synthetic-data-2026-10-19.md; never a word the validation or test transcripts contain, except
 the 26 single letters):
 
-  ... --word-set train jz letters --train-words 4000 --jz-words 800 --trials 3 --output data/openfs-synthetic-train3 --report data/openfs-synthetic-train3.report.json
-  ... --word-set letters --letters-trials 12 --trials 12 --output data/openfs-synthetic-letters --report data/openfs-synthetic-letters.report.json
+  ... --word-set train jz --quality-rule prefix --train-words 24000 --jz-words 2400 --trials 3 --output data/openfs-synthetic-words --report data/openfs-synthetic-words.report.json
+  ... --word-set letters --quality-rule prefix --trials 12 --output data/openfs-synthetic-letters --report data/openfs-synthetic-letters.report.json
 
 Nothing here runs at import time and nothing under model/ may import this script: the guard is
-tests/test_openfs_synthetic.py::test_generator_never_reaches_the_app_runtime.
+tests/test_openfs_synthetic.py::AppRuntimeFirewall.
 """
 import argparse
 from functools import partial
@@ -261,9 +266,38 @@ def transcribe(upstream, output_ids, index, inverse_vocabulary):
         return f'\ufffddecode-failed:{type(error).__name__}'
 
 
-def quality_block(tallies, groups):
+def accepted_by(rule, truth, predicted):
+    """Two keep/drop rules, both model-derived.
+
+    exact keeps a clip only when the whole transcription is the word. The released decoder is greedy
+    with max_len=32 and frequently never emits EOS on generated poses, so it appends hallucinated
+    characters after a correctly read word; on single letters exact then keeps almost nothing, which
+    would hollow out exactly the J/Z experiment. prefix keeps a clip when the transcription starts
+    with the word, accepting that tail. Which rule ran is recorded, and both rates are always
+    reported, so a prefix-kept pack is never mistaken for an exactly-transcribed one.
+    """
+    if rule == 'exact':
+        return predicted == truth
+    if rule == 'prefix':
+        return predicted.startswith(truth) and bool(truth)
+    raise ValueError(f'unknown quality rule {rule!r}.')
+
+
+def quality_block(tallies, groups, matches, rule, clips):
+    """Per-set and overall recognition-on-generated numbers, plus both keep-rule rates."""
+    accepted = sum(1 for clip in clips if clip['accepted'])
+    exact_total = sum(1 for clip in clips if clip['exact_match'])
+    prefix_total = sum(1 for clip in clips if clip['prefix_match'])
     return dict(overall=tallies['overall'].summary(),
-                groups={name: tally.summary() for name, tally in groups.items()})
+                groups={name: tally.summary() for name, tally in groups.items()},
+                rule=rule, accepted_clips=accepted, rejected_clips=len(clips) - accepted,
+                pass_rate=accepted / len(clips) if clips else None,
+                exact_match_clips=exact_total, prefix_match_clips=prefix_total,
+                exact_match_rate=exact_total / len(clips) if clips else None,
+                prefix_match_rate=prefix_total / len(clips) if clips else None,
+                match_rate_by_group={name: dict(exact=values[0] / len(clips) if clips else None,
+                                                prefix=values[1] / len(clips) if clips else None)
+                                     for name, values in matches.items()})
 
 
 def main():
@@ -284,6 +318,10 @@ def main():
     parser.add_argument('--exclude-words', type=Path, action='append', default=[])
     parser.add_argument('--max-word-length', type=int, default=MAX_WORD_LENGTH)
     parser.add_argument('--trials', type=int, default=3)
+    parser.add_argument('--quality-rule', choices=['exact', 'prefix'], default='exact',
+                        help='exact: the transcription is the whole word; prefix: it starts with the word. '
+                             'The greedy released decoder often skips EOS on generated poses, so exact '
+                             'keeps very little on single letters; both rates are always reported')
     parser.add_argument('--seed', type=int, default=20261019)
     parser.add_argument('--batch-size', type=int, default=64)
     parser.add_argument('--limit-clips', type=int, help='cap generated clips (pilots); whole words only')
@@ -376,6 +414,7 @@ def main():
     recognizer.eval()
 
     tallies = dict(overall=ErrorTally())
+    matches = dict(overall=[0, 0])
     groups = {}
     clips, pose_arrays, label_arrays = [], [], []
     frames = offset = seen = 0
@@ -404,15 +443,23 @@ def main():
                     guess = transcribe(upstream, transcription_ids, index, inverse_vocabulary)
                     truth = str(word).upper()
                     predicted = guess.upper()
-                    accepted = predicted == truth
+                    exact_match = predicted == truth
+                    prefix_match = bool(truth) and predicted.startswith(truth)
+                    accepted = accepted_by(args.quality_rule, truth, predicted)
                     name = f'trial{trial}-{word}'
                     tally = groups.setdefault(set_of_word.get(word, 'provided'), ErrorTally())
                     tallies['overall'].add(truth, predicted)
                     tally.add(truth, predicted)
+                    matches['overall'][0] += int(exact_match)
+                    matches['overall'][1] += int(prefix_match)
+                    group_matches = matches.setdefault(set_of_word.get(word, 'provided'), [0, 0])
+                    group_matches[0] += int(exact_match)
+                    group_matches[1] += int(prefix_match)
                     clips.append(dict(name=name, word=truth, set=set_of_word.get(word, 'provided'), trial=trial,
                                       start=offset, end=offset + len(pose), transcription=predicted,
-                                      accepted=bool(accepted),
-                                      quality_filter='released recognizer transcription, exact word match required'))
+                                      accepted=bool(accepted), exact_match=exact_match, prefix_match=prefix_match,
+                                      quality_filter=f'released recognizer transcription, {args.quality_rule} '
+                                                   f'word match required'))
                     pose_arrays.append(pose)
                     label_arrays.append(labels)
                     offset += len(pose)
@@ -471,15 +518,16 @@ def main():
                                 if device.type == 'cuda' else None),
                     quality_filter=dict(kind='model-derived quality filter (released recognizer transcription), '
                                               'not a human check',
-                                        rule='keep a clip only when the released recognizer transcribes it as the exact word',
-                                        pass_rate=accepted / len(clips) if clips else None,
-                                        accepted_clips=accepted, rejected_clips=len(clips) - accepted,
-                                        **quality_block(tallies, groups)))
+                                        description=f'keep a clip when the released recognizer transcribes it with '
+                                                    f'a {args.quality_rule} word match',
+                                        **quality_block(tallies, groups, matches, args.quality_rule, clips)))
     (args.output / 'provenance.json').write_text(json.dumps(document, indent=2), encoding='utf-8')
     report = args.report or args.output.with_suffix('.report.json')
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps(document, indent=2), encoding='utf-8')
     print(json.dumps(dict(clips=len(clips), frames=frames, accepted=accepted,
+                          exact_matches=document['quality_filter']['exact_match_clips'],
+                          prefix_matches=document['quality_filter']['prefix_match_clips'],
                           cer=document['quality_filter']['overall']['cer'],
                           **{key: document['timing'][key] for key in ('seconds', 'clips_per_second', 'peak_cuda_mib')},
                           report=str(report))), flush=True)
