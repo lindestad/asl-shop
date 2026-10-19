@@ -353,6 +353,7 @@ class PackerContract(unittest.TestCase):
         self.assertEqual(provenance['seed'], 7)
         self.assertEqual(provenance['word_lists']['train']['sha256'], 'ef' * 32)
         self.assertTrue(all(clip['synthetic'] for clip in clips))
+        self.assertEqual({clip['text'] for clip in clips}, {'CALLANAN', 'JIM', 'JAY'})  # the trainer reads text
         self.assertEqual(len(clips), 3)
         self.assertEqual(manifest['synthetic']['selection']['packed'], 3)
         self.assertIn('model-derived quality filter', manifest['synthetic']['selection']['quality_filter'])
@@ -534,10 +535,19 @@ class MergedPack(unittest.TestCase):
             self.skipTest('the trainer needs torch')
         output = self.root / 'openfs-synthetic-packed-trainer'
         run(PACKER, ['--generation', str(self.generation), '--output', str(output), '--merge-with', str(self.real)])
-        from scripts.train_openfs import read_data
+        from scripts.train_openfs import batches, read_data
         data = read_data(output, 'train', 'sequence')
         self.assertEqual(len(data['clips']), 5)
         self.assertEqual(data['x'].shape[1], 91)
+        # one real batch through the shipped collator: text targets and per-frame labels must line up
+        values, targets, lengths, counts, auxiliary, selected = next(batches(data, 2, 'sequence'))
+        self.assertEqual(int(values.shape[0]), len(selected))
+        self.assertEqual(int(values.shape[2]), 91)
+        self.assertEqual([int(n) for n in lengths],
+                         [data['clips'][index]['end'] - data['clips'][index]['start'] for index in selected])
+        self.assertEqual(int(counts.sum()), sum(len(data['clips'][index]['text']) for index in selected))
+        for position in range(len(selected)):
+            self.assertTrue(bool((auxiliary[position, :int(lengths[position])] >= 0).all()))
         manifest = json.loads((output / 'dataset.json').read_text(encoding='utf-8'))
         self.assertEqual(manifest['contract'], CONTRACT)
         self.assertEqual([set(part['signers']) for part in manifest['partitions']][0] &

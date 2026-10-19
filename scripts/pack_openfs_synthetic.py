@@ -287,7 +287,7 @@ def main():
     per_split = {split: dict(rows=[], targets=[], clips=[], length=0) for split in WORD_SPLITS}
     for clip, row, target in zip(kept, rows, targets):
         split = assignment.get(clip['word'], 'train')
-        clip.update(split=split, synthetic=True, generated_clip=True,
+        clip.update(split=split, synthetic=True, generated_clip=True, text=clip['word'],
                     signer=(f'{SYNTHETIC_SIGNER}-{split}' if args.split_words else SYNTHETIC_SIGNER),
                     name=f"synthetic-{clip['set']}-{clip['word']}-trial{clip['trial']}",
                     start=per_split[split]['length'], end=per_split[split]['length'] + len(row))
