@@ -437,6 +437,8 @@ def main():
     p.add_argument('--ar-batch-size',type=int,default=8)
     p.add_argument('--fusion-select-limit',type=int,default=1000)
     p.add_argument('--trusted-source',action='store_true')
+    p.add_argument('--skip-head',action='store_true',help='omit our causal CTC head; reuse its block from an earlier run of the same report')
+    p.add_argument('--skip-reference',action='store_true',help='omit the upstream OpenFS reference; reuse its block from an earlier run')
     p.add_argument('--evaluate-splits',nargs='+',default=['test'])
     p.add_argument('--select-split',default='validation')
     p.add_argument('--select-limit',type=int,default=3000)
@@ -446,6 +448,7 @@ def main():
     p.add_argument('--report',type=Path,default=ROOT/'data/lm-rescoring.report.json')
     args=p.parse_args()
     if args.lm_source is None: args.lm_source=DEFAULT_LM_SOURCES
+    previous=json.loads(args.report.read_text(encoding='utf-8')) if args.report.exists() else {}
     torch.set_num_threads(4)
     started=time.perf_counter()
     held_out={row['name'] for split in ('validation','test') for row in clips_of(args.data,split)}
@@ -460,18 +463,29 @@ def main():
                                insert_bonus_grid=args.lm_insert_bonus,band_grid=args.lm_band_grid,
                                end_token_variants=args.lm_end_tokens,
                                fusion_selection_limit=args.fusion_select_limit,tuned_on_dev_text_only=True))
-    if args.checkpoint:
+    for key,value in previous.items():
+        if key not in result: result[key]=value  # keep phase blocks computed by an earlier run
+
+    def save():
+        result['phases']=[block for block in ('causal_head','openfs_reference') if block in result]
+        args.report.parent.mkdir(parents=True,exist_ok=True)
+        args.report.write_text(json.dumps(result,indent=2),encoding='utf-8')
+        print(json.dumps(dict(saved=str(args.report),phases=result['phases'])),flush=True)
+
+    if not args.skip_head and args.checkpoint:
         head=load_checkpoint(args.checkpoint,'sequence').to(args.device).eval()
         result['causal_head']=run_head(head,args,language)
-    if args.ar_source:
+        del head; gc.collect(); save()
+    if not args.skip_reference and args.ar_source:
         if not (args.ar_model_dir and args.trusted_source):
             p.error('--ar-source requires --ar-model-dir and --trusted-source to evaluate the reference model.')
         if args.ar_npz_dir is None:
             args.ar_npz_dir=ROOT/'data/external/openfs/extracted/fingerspelling_fsboard_raw'
+        gc.collect()
         result['openfs_reference']=run_reference(args,language)
+        gc.collect(); save()
     result['seconds']=round(time.perf_counter()-started,1)
-    args.report.parent.mkdir(parents=True,exist_ok=True)
-    args.report.write_text(json.dumps(result,indent=2),encoding='utf-8')
+    save()
     print(json.dumps(dict(report=str(args.report),seconds=result['seconds'])),flush=True)
 
 
