@@ -864,7 +864,8 @@ def benchmark_block(args,checkpoint):
 def evaluate_only(args):
     """Score an existing checkpoint on the test split with the same metric path, then stop: the
     released baseline (data/sequence.pt) is a row in this study's tables, not a training run."""
-    model=load_checkpoint(args.evaluate_checkpoint,'sequence')
+    model=load_checkpoint(args.evaluate_checkpoint,'sequence').to(args.device)  # evaluate() moves
+    # the clips to --device, so the checkpoint has to live there too or the first matmul throws
     test_data=read_data(args.data,'test','sequence')
     summary=evaluate(model,test_data,args,'test',limit=args.test_limit)
     document=dict(mode='evaluate',checkpoint=str(args.evaluate_checkpoint.resolve()),
