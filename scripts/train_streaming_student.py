@@ -802,6 +802,7 @@ def benchmark_block(args,checkpoint):
     with tempfile.TemporaryDirectory() as directory:
         json_path=Path(directory)/'benchmark.json'
         command=[sys.executable,str(harness),'--packed',str(args.data),'--sequence',str(checkpoint),
+                 '--handshape',str(args.handshape),
                  '--threads',*[str(value) for value in args.benchmark_threads],
                  '--frames',*[str(value) for value in args.benchmark_frames],'--report',str(json_path)]
         if args.packed_generation:
@@ -974,6 +975,8 @@ def main():
                              '--report as one accuracy-versus-latency table')
     parser.add_argument('--benchmark',action='store_true',
                         help='also run scripts/benchmark_neural.py on each trained checkpoint')
+    parser.add_argument('--handshape',type=Path,default=ROOT/'data/handshape.pt',
+                        help='runtime handshape checkpoint forwarded to scripts/benchmark_neural.py')
     parser.add_argument('--benchmark-threads',type=int,nargs='+',default=[4])
     parser.add_argument('--benchmark-frames',type=int,nargs='+',default=[300,900])
     args=parser.parse_args()

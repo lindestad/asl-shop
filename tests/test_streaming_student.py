@@ -467,6 +467,9 @@ class RuntimeMetrics(unittest.TestCase):
                       __import__('model.recognition_metrics', fromlist=['ErrorTally']).ErrorTally)
 
     def test_harness_measures_a_student_through_the_live_runtime(self):
+        handshape = REPO / 'data' / 'handshape.pt'
+        if not handshape.is_file():     # the live runtime also needs the shipped handshape head
+            self.skipTest(f'{handshape} is not present in this checkout')
         s = self.s
         with tempfile.TemporaryDirectory() as directory:
             pack = write_pack(Path(directory) / 'pack', splits=(('train', 2, 30),
@@ -478,7 +481,7 @@ class RuntimeMetrics(unittest.TestCase):
                             dilations=list(net.dilations), receptive_field_frames=41,
                             state_dict=net.state_dict(), metrics={}, epoch=1, seed=0,
                             dataset=str(pack), experimental=True), checkpoint)
-            args = argparse.Namespace(data=pack, packed_generation=None,
+            args = argparse.Namespace(data=pack, packed_generation=None, handshape=handshape,
                                       benchmark_threads=[1], benchmark_frames=[12])
             with quiet():
                 measured = s.benchmark_block(args, checkpoint)
