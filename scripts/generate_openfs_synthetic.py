@@ -45,6 +45,7 @@ tests/test_openfs_synthetic.py::test_generator_never_reaches_the_app_runtime.
 import argparse
 from functools import partial
 import hashlib
+import importlib.machinery
 import importlib.util
 import json
 from pathlib import Path
@@ -86,14 +87,25 @@ def sha256_of(path, buffer_size=1 << 20):
 def upstream_dependency_stubs():
     """Install loud stubs for upstream module-level imports this venv lacks; returns what was faked."""
     installed = {}
-    if importlib.util.find_spec('tqdm') is None:
+
+    def missing(name):
+        if name in sys.modules:
+            return False
+        try:
+            return importlib.util.find_spec(name) is None
+        except (ImportError, ValueError):     # find_spec trips over injected stub modules without __spec__
+            return False
+    if missing('tqdm'):
         module = types.ModuleType('tqdm')
+        module.__spec__ = importlib.machinery.ModuleSpec('tqdm', loader=None)
         module.tqdm = lambda iterable=(), *args, **kwargs: iter(iterable)
         sys.modules['tqdm'] = module
         installed['tqdm'] = 'tqdm.tqdm is an iterator passthrough: a progress bar, no numeric effect'
-    if importlib.util.find_spec('scipy') is None:
+    if missing('scipy'):
         scipy = types.ModuleType('scipy')
+        scipy.__spec__ = importlib.machinery.ModuleSpec('scipy', loader=None)
         ndimage = types.ModuleType('scipy.ndimage')
+        ndimage.__spec__ = importlib.machinery.ModuleSpec('scipy.ndimage', loader=None)
 
         def blocked_zoom(*args, **kwargs):
             raise UpstreamDependencyMissing('scipy.ndimage.zoom is upstream pose resampling '
@@ -103,9 +115,11 @@ def upstream_dependency_stubs():
         sys.modules['scipy'] = scipy
         sys.modules['scipy.ndimage'] = ndimage
         installed['scipy'] = 'scipy.ndimage.zoom raises: resampling is training-time augmentation'
-    if importlib.util.find_spec('sklearn') is None:
+    if missing('sklearn'):
         sklearn = types.ModuleType('sklearn')
+        sklearn.__spec__ = importlib.machinery.ModuleSpec('sklearn', loader=None)
         preprocessing = types.ModuleType('sklearn.preprocessing')
+        preprocessing.__spec__ = importlib.machinery.ModuleSpec('sklearn.preprocessing', loader=None)
 
         def blocked(name):
             raise UpstreamDependencyMissing(f'sklearn.preprocessing.{name} belongs to the upstream '
