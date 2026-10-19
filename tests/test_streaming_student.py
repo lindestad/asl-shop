@@ -311,6 +311,40 @@ class TeacherPayload(unittest.TestCase):
         self.assertIn('app model', str(caught.exception))
 
 
+class TeacherCache(unittest.TestCase):
+    """The longer-rf runs rerun on a cached teacher pass, so the ragged records must round-trip."""
+
+    def test_ragged_posterior_records_survive_the_cache_round_trip(self):
+        s = load_script()
+        with tempfile.TemporaryDirectory() as directory:
+            data = {'clips': [{'name': f'c{i}'} for i in range(3)]}
+
+            def fake(teacher, data, order):   # rows length == posterior rows: np.array() would
+                return ({int(i): (np.arange(2 + int(i), dtype=np.int32),                   # crash
+                                  np.full((2 + int(i), 5), 1. / (5 + int(i)), np.float16))
+                         for i in order}, {'clips': 3})
+
+            args = argparse.Namespace(data=Path(directory) / 'pack',
+                                      teacher_cache=Path(directory) / 'teacher.npz')
+            teacher = {'provenance': {'paths': {'teacher': 'weights'}}, 'representation': 'compressed',
+                       'positions': 'arange', 'channels': 42}
+            original = s.teacher_posteriors
+            s.teacher_posteriors = fake
+            try:
+                posteriors, stats = s.teacher_posteriors_cached(args, teacher, data, [0, 1, 2])
+                self.assertEqual(stats['cache'], 'miss')
+                cached, stats = s.teacher_posteriors_cached(args, teacher, data, [0, 1, 2])
+                self.assertEqual(stats['cache'], 'hit')
+                self.assertEqual(sorted(posteriors), sorted(cached))
+                for index in posteriors:
+                    np.testing.assert_array_equal(posteriors[index][0], cached[index][0])
+                    np.testing.assert_allclose(posteriors[index][1], cached[index][1])
+                _, stats = s.teacher_posteriors_cached(args, teacher, data, [0, 1])  # other subset
+                self.assertEqual(stats['cache'], 'miss')
+            finally:
+                s.teacher_posteriors = original
+
+
 class ReceptiveField(unittest.TestCase):
     """No report row may claim a latency the built network does not actually have."""
 

@@ -1121,8 +1121,10 @@ def teacher_posteriors_cached(args,teacher,data,order):
     posteriors,stats=teacher_posteriors(teacher,data,order)
     if args.teacher_cache:
         args.teacher_cache.parent.mkdir(parents=True,exist_ok=True)
-        records=np.array([np.array([rows,posterior],dtype=object)
-                          for rows,posterior in posteriors.values()],dtype=object)
+        records=np.empty((len(posteriors),2),dtype=object)  # per-cell assignment: np.array()
+        for position,(rows,posterior) in enumerate(posteriors.values()):  # would broadcast rows
+            records[position,0]=np.asarray(rows,dtype=np.int32)           # into the posterior
+            records[position,1]=np.asarray(posterior,dtype=np.float16)    # shape when lengths match
         temporary=args.teacher_cache.with_name(f'{args.teacher_cache.name}.{os.getpid()}.tmp')
         with temporary.open('wb') as stream:
             np.savez(stream,key=digest,
