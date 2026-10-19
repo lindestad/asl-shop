@@ -406,14 +406,18 @@ def load_teacher(args):
 
 def teacher_memory(teacher,poses,segments,positions):
     """Encoder pass for one padded batch; both teacher classes take (poses, segments, positions)
-    but disagree on pose rank and position dtype, which is the only place that knows it."""
+    but disagree on pose rank and position dtype, which is the only place that knows it.  The
+    network already lives on --device, so the numpy batch has to follow it there."""
+    device=next(teacher['network'].parameters()).device
     if teacher['kind']=='upstream':
-        values=torch.as_tensor(poses)
+        values=torch.as_tensor(poses,device=device)
         values=values.reshape(len(poses),values.shape[1],values.shape[2]//2,2)
-        return teacher['network'](values,torch.as_tensor(segments),
-                                  torch.as_tensor(positions,dtype=torch.long))['encoder_memory']
-    return teacher['network'].encode(torch.as_tensor(poses),torch.as_tensor(segments),
-                                     torch.as_tensor(positions,dtype=torch.float32))[0]
+        return teacher['network'](values,torch.as_tensor(segments,device=device),
+                                  torch.as_tensor(positions,dtype=torch.long,device=device)
+                                  )['encoder_memory']
+    return teacher['network'].encode(torch.as_tensor(poses,device=device),
+                                     torch.as_tensor(segments,device=device),
+                                     torch.as_tensor(positions,dtype=torch.float32,device=device))[0]
 
 
 def token_groups(lengths,batch_size,token_budget,attention_budget):
