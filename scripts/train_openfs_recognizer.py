@@ -41,6 +41,11 @@ peak torch.cuda.max_memory_allocated at the end; --warm-epoch 0 makes the two au
 losses fire immediately, which the paper's real schedule only does from epoch 6):
 
   .venv/bin/python scripts/train_openfs_recognizer.py --data data/openfs-packed --input-representation gaps --output data/models/openfs-recognizer-gaps/smoke.pt --epochs 1 --limit-clips 400 --validation-limit 100 --batch-size 8 --evaluate-initial --warm-epoch 0
+
+Score an existing checkpoint on any split without training (the report goes to
+<output stem>.eval-report.json, the checkpoint is never rewritten):
+
+  .venv/bin/python scripts/train_openfs_recognizer.py --data data/openfs-packed --input-representation compressed --output data/models/openfs-recognizer-compressed/test-eval.pt --resume data/models/openfs-recognizer-compressed/recognizer.pt --evaluate-only --evaluate-splits test
 """
 import argparse
 from collections import defaultdict
@@ -331,8 +336,15 @@ def main():
     p.add_argument('--validation-limit',type=int)
     p.add_argument('--evaluate-initial',action='store_true',help='evaluate the untrained model first')
     p.add_argument('--resume',type=Path)
+    p.add_argument('--evaluate-only',dest='evaluate_only',action='store_true',
+                   help='train nothing: load --resume and score --evaluate-splits. Writes <output stem>.eval-report.json '
+                        'and never writes a checkpoint, so point --output at a fresh stem (e.g. .../test-eval.pt).')
+    p.add_argument('--evaluate-splits',dest='evaluate_splits',nargs='+',default=['validation'],
+                   choices=['train','validation','test'])
     p.add_argument('--force',action='store_true',help='replace an existing --output; for throwaway smoke runs only')
     args=p.parse_args()
+    if args.evaluate_only and not args.resume:
+        raise ValueError('--evaluate-only needs --resume <checkpoint> to score.')
     if args.output.exists() and not (args.force or args.resume):
         raise ValueError(f'{args.output} already exists; use a fresh run name (never overwrite checkpoints).')
     args.input_dim=91 if args.input_representation=='gaps' else 42
@@ -365,6 +377,21 @@ def main():
                           torch=torch.__version__,device=args.device,amp=args.amp,
                           gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None,
                           training=len(train['clips']),validation=len(validation['clips']))),flush=True)
+    if args.evaluate_only:
+        evaluations=[evaluate(model,read_data(args.data,name),args,name) for name in args.evaluate_splits]
+        for metrics in evaluations:
+            print(json.dumps({key:metrics[key] for key in ('split','cer','letter_accuracy','exact_sequence_accuracy',
+                                                            'clips','characters','errors','exact','seconds')}),flush=True)
+        peak=torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
+        report=dict(task='recognizer',mode='evaluate-only',representation=args.input_representation,parameters=parameters,
+                    checkpoint=str(args.resume.resolve()),evaluations=evaluations,dataset=schema,
+                    torch=torch.__version__,peak_vram_mib=round(peak/2**20),
+                    gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None)
+        report_path=args.output.with_suffix('.eval-report.json')
+        report_path.parent.mkdir(parents=True,exist_ok=True)
+        report_path.write_text(json.dumps(report,indent=2),encoding='utf-8')
+        print(json.dumps(dict(report=str(report_path),peak_vram_mib=report['peak_vram_mib'])),flush=True)
+        return
     baseline=None
     if args.evaluate_initial:
         baseline=evaluate(model,validation,args,'validation-untrained')
