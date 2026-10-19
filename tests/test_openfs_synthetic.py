@@ -449,42 +449,54 @@ class PackerContract(unittest.TestCase):
                 self.assertFalse(left & right)
 
 
+def build_real_pack(root):
+    """A tiny but contract-honest packed FSboard dataset: three train clips, one validation, one test."""
+    root = Path(root)
+    (root / 'openfs-packed-real').mkdir(parents=True, exist_ok=True)
+    real = root / 'openfs-packed-real'
+    rows, targets, clips, offset = [], [], [], 0
+    for index in range(3):
+        pose = sampled_pose(100 + index, 12)
+        values = encode_poses({0: pose}, {}, np.arange(12), np.array([], dtype=np.int64))
+        rows.append(values)
+        targets.append(np.full(12, VOCAB.index('C'), dtype=np.int16))
+        clips.append(dict(name=f'real-{index}', text='CC', signer=f'person-{index}', session='s',
+                          start=offset, end=offset + 12))
+        offset += 12
+    validation = [dict(clips[0], signer='person-3', name='real-validation', text='JA')]
+    test = [dict(clips[0], signer='person-4', name='real-test', text='I')]
+    for split in ('train', 'validation', 'test'):
+        members = clips if split == 'train' else (validation if split == 'validation' else test)
+        body = np.concatenate(rows) if split == 'train' else np.concatenate(rows[:1])
+        marks = np.concatenate(targets) if split == 'train' else np.concatenate(targets[:1])
+        np.save(real / f'{split}_frames.npy', body)
+        np.save(real / f'{split}_targets.npy', marks)
+        (real / f'{split}_clips.json').write_text(json.dumps(members), encoding='utf-8')
+    partitions = []
+    for split, members in (('train', clips), ('validation', validation), ('test', test)):
+        partitions.append(dict(split=split, clips=len(members), frames=len(members) * 12,
+                               signers=[clip['signer'] for clip in members]))
+    (real / 'dataset.json').write_text(json.dumps(dict(
+        contract=CONTRACT, labels=VOCAB, static_labels=HANDSHAPES, partitions=partitions)),
+        encoding='utf-8')
+    return real
+
+
+def build_generation(root, clips):
+    """A tiny generation directory shaped exactly like the generation script's output."""
+    return make_generation(Path(root) / 'generation', clips)
+
+
 class MergedPack(unittest.TestCase):
     """Mixing synthetic rows into a real pack must leave the real splits untouched."""
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
-        self.real = self.root / 'openfs-packed-real'
-        self.real.mkdir()
-        rows, targets, clips, offset = [], [], [], 0
-        for index in range(3):
-            pose = sampled_pose(100 + index, 12)
-            values = encode_poses({0: pose}, {}, np.arange(12), np.array([], dtype=np.int64))
-            rows.append(values)
-            targets.append(np.full(12, VOCAB.index('C'), dtype=np.int16))
-            clips.append(dict(name=f'real-{index}', text='CC', signer=f'person-{index}', session='s',
-                              start=offset, end=offset + 12))
-            offset += 12
-        validation = [dict(clips[0], signer='person-3', name='real-validation')]
-        test = [dict(clips[0], signer='person-4', name='real-test')]
-        for split in ('train', 'validation', 'test'):
-            members = clips if split == 'train' else (validation if split == 'validation' else test)
-            body = np.concatenate(rows) if split == 'train' else np.concatenate(rows[:1])
-            marks = np.concatenate(targets) if split == 'train' else np.concatenate(targets[:1])
-            np.save(self.real / f'{split}_frames.npy', body)
-            np.save(self.real / f'{split}_targets.npy', marks)
-            (self.real / f'{split}_clips.json').write_text(json.dumps(members), encoding='utf-8')
-        partitions = []
-        for split, members in (('train', clips), ('validation', validation), ('test', test)):
-            partitions.append(dict(split=split, clips=len(members), frames=len(members) * 12,
-                                   signers=[clip['signer'] for clip in members]))
-        (self.real / 'dataset.json').write_text(json.dumps(dict(
-            contract=CONTRACT, labels=VOCAB, static_labels=HANDSHAPES, partitions=partitions)),
-            encoding='utf-8')
-        self.generation = make_generation(self.root / 'generation',
-                                          [dict(word='jim', set='jz', frames=10, accepted=True),
-                                           dict(word='ana', set='train', frames=8, accepted=True)])
+        self.real = build_real_pack(self.root)
+        self.generation = build_generation(self.root,
+                                           [dict(word='jim', set='jz', frames=10, accepted=True),
+                                            dict(word='ana', set='train', frames=8, accepted=True)])
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -530,6 +542,69 @@ class MergedPack(unittest.TestCase):
         self.assertEqual(manifest['contract'], CONTRACT)
         self.assertEqual([set(part['signers']) for part in manifest['partitions']][0] &
                          set(VOCAB), set())      # signers are ids, not vocabulary
+
+
+class MixEvaluation(unittest.TestCase):
+    """The J/Z and single-letter breakdown this research question is actually about."""
+
+    EVALUATOR = ROOT / 'scripts/evaluate_synthetic_mix.py'
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.real = build_real_pack(self.root)
+        self.generation = build_generation(self.root,
+                                           [dict(word='jim', set='jz', frames=10, accepted=True)])
+        self.pack = self.root / 'openfs-synthetic-packed-eval'
+        run(PACKER, ['--generation', str(self.generation), '--output', str(self.pack),
+                     '--merge-with', str(self.real)])
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_clips_fall_into_the_right_subsets(self):
+        from scripts.evaluate_synthetic_mix import clip_groups
+        groups = clip_groups([dict(text='JA'), dict(text='I'), dict(text='CC'), dict(text='zoo')])
+        self.assertEqual(groups[0], dict(overall=True, movement_letters=True, single_letter=False))
+        self.assertEqual(groups[1], dict(overall=True, movement_letters=False, single_letter=True))
+        self.assertEqual(groups[2], dict(overall=True, movement_letters=False, single_letter=False))
+        self.assertEqual(groups[3]['movement_letters'], True)      # lowercase transcripts still count
+
+    @unittest.skipIf(torch is None, 'the evaluator builds a network')
+    def test_the_report_splits_the_hardlinked_validation_split_by_subset(self):
+        from model.neural import FingerspellingNet
+        network = FingerspellingNet(8, dilations=(1,))
+        checkpoint = self.root / 'tiny-sequence.pt'
+        torch.save(dict(contract=CONTRACT, task='sequence', hidden=8, labels=VOCAB, dilations=[1],
+                        state_dict={name: value.detach() for name, value in network.state_dict().items()},
+                        metrics={}, epoch=0, seed=42, dataset=str(self.pack.resolve()), experimental=True),
+                   checkpoint)
+        report = self.root / 'openfs-synthetic-eval.report.json'
+        run(self.EVALUATOR, ['--data', str(self.pack), '--checkpoint', str(checkpoint), '--split', 'validation',
+                             '--device', 'cpu', '--batch-size', '4', '--report', str(report)])
+        document = json.loads(report.read_text(encoding='utf-8'))
+        row = document['rows'][0]
+        self.assertEqual(row['overall']['clips'], 1)               # the hardlinked real validation clip
+        self.assertEqual(row['movement_letters']['clips'], 1)      # its transcript is 'JA'
+        self.assertNotIn('single_letter', row)                     # ...which is not a single letter
+        self.assertEqual(row['overall']['deletions'] + row['overall']['substitutions']
+                         + row['overall']['insertions'], row['overall']['errors'])
+        self.assertAlmostEqual(row['overall']['cer'], row['overall']['errors'] / row['overall']['characters'],
+                               places=12)
+        self.assertTrue(document['research_only'])
+        self.assertTrue(document['synthetic_rows_in_pack']['present'])
+        self.assertEqual(document['synthetic_rows_in_pack']['merged_from'], str(self.real.resolve()))
+        single = self.root / 'openfs-synthetic-eval-single.report.json'
+        run(self.EVALUATOR, ['--data', str(self.pack), '--checkpoint', str(checkpoint), '--split', 'test',
+                             '--device', 'cpu', '--batch-size', '4', '--report', str(single)])
+        single_row = json.loads(single.read_text(encoding='utf-8'))['rows'][0]
+        self.assertEqual(single_row['single_letter']['clips'], 1)  # the test split transcript is 'I'
+
+    def test_a_synthetic_pack_refuses_a_report_outside_the_synthetic_namespace(self):
+        result = run(self.EVALUATOR, ['--data', str(self.pack), '--checkpoint', str(self.root / 'none.pt'),
+                                      '--report', str(self.root / 'plain.evaluate.report.json')],
+                     expect_zero=False)
+        self.assertIn('synthetic namespace', result.stderr + result.stdout)
 
 
 class AppRuntimeFirewall(unittest.TestCase):
