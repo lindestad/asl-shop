@@ -22,7 +22,7 @@ while [ ! -f docs/autoresearch-stop ]; do
   i=$((i + 1))
   log="$LOG_DIR/iter-$(printf '%03d' "$i")-$(date +%Y%m%d-%H%M%S).log"
   echo "iteration $i -> $log"
-  opencode run --model "$MODEL" "$(cat "$GOAL")" >"$log" 2>&1
+  opencode run --standalone --auto --model "$MODEL" "$(cat "$GOAL")" >"$log" 2>&1
   sleep 20
   if [ "$MAX_ITERS" -gt 0 ] && [ "$i" -ge "$MAX_ITERS" ]; then
     echo "reached RALPH_MAX=$MAX_ITERS"
