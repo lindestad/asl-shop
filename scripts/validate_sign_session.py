@@ -14,7 +14,7 @@ import sys
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from scripts.sign_sessions import (HUMAN_PROVENANCES,SUGGESTED_PROVENANCE,SignSessionError,
-                                   read_annotation,read_session,validate)
+                                   read_annotation,read_session,synthetic_recording,validate)
 
 
 def check(directory,*,draft=False,require_human=False):
@@ -33,8 +33,12 @@ def check(directory,*,draft=False,require_human=False):
     if draft:
         warnings.append('this is the draft file; scripts/label_sign_session.py --confirm writes the '
                         'confirmed annotation.json that scripts/eval_held_letters.py scores.')
-    if require_human and annotation.get('label_provenance') not in HUMAN_PROVENANCES:
-        errors.append(f'label_provenance={annotation.get("label_provenance")!r} is not a human label.')
+    if require_human and (annotation.get('label_provenance') not in HUMAN_PROVENANCES
+                          or synthetic_recording(session)):
+        errors.append((f'label_provenance={annotation.get("label_provenance")!r} is not a human label.'
+                       if annotation.get('label_provenance') not in HUMAN_PROVENANCES else
+                       'the recording is scripted (consent.synthetic), so no person signed these frames; '
+                       'confirming a script is not a signer.'))
     return session,annotation,errors,warnings
 
 
