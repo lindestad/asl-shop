@@ -320,9 +320,10 @@ class TeacherCache(unittest.TestCase):
             data = {'clips': [{'name': f'c{i}'} for i in range(3)]}
 
             def fake(teacher, data, order):   # rows length == posterior rows: np.array() would
-                return ({int(i): (np.arange(2 + int(i), dtype=np.int32),                   # crash
-                                  np.full((2 + int(i), 5), 1. / (5 + int(i)), np.float16))
-                         for i in order}, {'clips': 3})
+                return ({int(i): (np.arange(4 + 2 * int(i), dtype=np.int32),            # crash
+                                  np.full((4 + 2 * int(i), 5), int(i), np.float16))      # and
+                         for i in (2, 0, 1)}, {'clips': 3})  # insertion order != sorted order:
+                # a writer that pairs sorted names with insertion-ordered records mis-glues clips
 
             args = argparse.Namespace(data=Path(directory) / 'pack',
                                       teacher_cache=Path(directory) / 'teacher.npz')

@@ -1130,14 +1130,19 @@ def teacher_posteriors_cached(args,teacher,data,order):
     posteriors,stats=teacher_posteriors(teacher,data,order)
     if args.teacher_cache:
         args.teacher_cache.parent.mkdir(parents=True,exist_ok=True)
-        records=np.empty((len(posteriors),2),dtype=object)  # per-cell assignment: np.array()
-        for position,(rows,posterior) in enumerate(posteriors.values()):  # would broadcast rows
-            records[position,0]=np.asarray(rows,dtype=np.int32)           # into the posterior
-            records[position,1]=np.asarray(posterior,dtype=np.float16)    # shape when lengths match
+        # names and records must be written from ONE iteration order: a cache hit zips them, and
+        # sorted(keys) vs dict insertion order mispairs clips, gluing one clip's posteriors onto
+        # another clip's rows (which is what crashed rf200 with an out-of-range row index)
+        ordered=sorted(posteriors)
+        records=np.empty((len(ordered),2),dtype=object)  # per-cell assignment: np.array() would
+        for position,index in enumerate(ordered):        # broadcast rows into the posterior shape
+            rows,posterior=posteriors[index]
+            records[position,0]=np.asarray(rows,dtype=np.int32)
+            records[position,1]=np.asarray(posterior,dtype=np.float16)
         temporary=args.teacher_cache.with_name(f'{args.teacher_cache.name}.{os.getpid()}.tmp')
         with temporary.open('wb') as stream:
             np.savez(stream,key=digest,
-                     clip_names=[data['clips'][index]['name'] for index in sorted(posteriors)],
+                     clip_names=[data['clips'][index]['name'] for index in ordered],
                      records=records if posteriors else np.zeros(0,dtype=object),
                      stats=json.dumps(stats))
         temporary.replace(args.teacher_cache)
