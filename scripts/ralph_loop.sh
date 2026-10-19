@@ -10,6 +10,12 @@ MODEL="${RALPH_MODEL:-strata/qwen3.8-flash-next-iq3_s}"
 MAX_ITERS="${RALPH_MAX:-0}"            # 0 = keep going until stopped
 GOAL="docs/autoresearch-goal.md"
 LOG_DIR="logs/ralph"
+export PATH="$HOME/.opencode/bin:$PATH"
+
+if ! command -v opencode >/dev/null 2>&1; then
+  echo "opencode not on PATH (looked in ~/.opencode/bin too)"
+  exit 1
+fi
 
 if [ -f docs/autoresearch-stop ]; then
   echo "docs/autoresearch-stop exists; delete it to start the loop"
