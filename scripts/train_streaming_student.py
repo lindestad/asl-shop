@@ -766,6 +766,7 @@ def student_run(args,data,validation,test_data,frame_label,label_info,posteriors
                 scaler.update()
                 loss_sum+=float(loss.detach())
                 ctc_sum+=ctc_value
+                kl_sum+=kl_value
                 steps+=1
                 if steps%200==0:
                     print(json.dumps(dict(config=f'rf{field}',epoch=epoch,steps=steps,
