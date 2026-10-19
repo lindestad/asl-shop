@@ -209,6 +209,9 @@ def replay(session,annotation,runtime,logs,*,limit_frames=None,segment_gap_ms=70
     finishes={block[1]-1 for block in blocks if block[1]-1<n}
     evidence=[]; emissions=[]; segments=[]; shown=[]
     segment=None; index_in_log=0; segment_index=0
+    # The handshape recorder keeps every arrival it has seen, so a second session in the same process must
+    # index past the first one's frames rather than from the front of the list.
+    handshape_offset=len(logs['handshape'].probabilities) if 'handshape' in logs else 0
     for frame in range(n):
         hands=hands_at(session,frame)
         timestamp=float(session['timestamps_ms'][frame])
@@ -230,13 +233,13 @@ def replay(session,annotation,runtime,logs,*,limit_frames=None,segment_gap_ms=70
             if calls_handshape: index_in_log+=1
             output=runtime.analyze(hands,width,height,video=True,session_id=segment_id(session,segment['index']),
                                    timestamp_ms=timestamp,finish=finish)
-            if calls_handshape and len(logs['handshape'].probabilities)<index_in_log:
+            if calls_handshape and len(logs['handshape'].probabilities)<handshape_offset+index_in_log:
                 raise SignSessionError('the live handshape gate no longer calls its model for a single visible '
                                        'hand, so this harness no longer mirrors it: update the harness first')
             seen=hands
             probabilities=None
             if calls_handshape:
-                table=np.asarray(logs['handshape'].probabilities[index_in_log-1])
+                table=np.asarray(logs['handshape'].probabilities[handshape_offset+index_in_log-1])
                 probabilities=table.reshape(-1,table.shape[-1])[0]  # the live path scores one hand per arrival
             handshape=None
             if probabilities is not None:
