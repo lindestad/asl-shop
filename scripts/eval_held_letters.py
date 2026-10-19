@@ -48,7 +48,7 @@ sys.path.insert(0,str(ROOT))
 from model.recognition_metrics import ErrorTally
 from scripts.sign_sessions import (HUMAN_PROVENANCES,SUGGESTED_PROVENANCE,SignSessionError,block_expected,
                                    frame_span_map,hands_at,movement_score,presence_blocks,read_annotation,
-                                   read_session,spans_for_block,validate)
+                                   read_session,spans_for_block,synthetic_recording,validate)
 
 REPORT_SCHEMA='asl-shop-held-letter-eval/v1'
 APP_HANDSHAPE_GATE=.8  # the fixed per-frame letter gate in model/live_neural.py
@@ -138,10 +138,10 @@ class WorkerBridge:
 def recorded_frames(session):
     """Re-encode the session's own video so --via-worker feeds the frames the app would have seen."""
     import cv2
-    path=Path(session['directory'])/(session.get('video_file') or '')
-    if not session.get('video_file') or not path.is_file():
-        raise SignSessionError('--via-worker needs a session that kept its video_file recording.')
-    capture=cv2.VideoCapture(str(path))
+    gap=video_gap(session)
+    if gap:
+        raise SignSessionError(gap)
+    capture=cv2.VideoCapture(str(Path(session['directory'])/session['video_file']))
     try:
         while True:
             ok,frame=capture.read()
@@ -153,6 +153,26 @@ def recorded_frames(session):
             yield 'data:image/jpeg;base64,'+base64.b64encode(coded[1]).decode()
     finally:
         capture.release()
+
+
+def video_gap(session):
+    """Why --via-worker cannot replay this session, or None when it can.
+
+    The desktop-app boundary replay needs the frames the camera saw, and no recording path in this repo
+    keeps those frames yet: scripts/collect_signs.py writes landmark tracks only. Saying so before the
+    worker is spawned keeps the failure in the report instead of in a dead subprocess.
+    """
+    named=session.get('video_file')
+    if not named:
+        return ('--via-worker replays the recorded video through scripts/recognition_worker.py, and this '
+                'session kept no video: session.json has video_file null. Landmark tracks alone cannot '
+                'feed that path. Drop --via-worker to replay the landmarks through the same streaming '
+                'runtime in-process, or record a session that keeps its source video next to '
+                'landmarks.npz and name it in session.json.')
+    if not (Path(session['directory'])/named).is_file():
+        return (f'--via-worker needs the video this session named, and {named} is not next to '
+                f'{session["directory"]}. Drop --via-worker to replay the landmark tracks instead.')
+    return None
 
 
 def segment_id(session,index):
@@ -492,7 +512,8 @@ def spelling_rows(data):
 def score_session(session,annotation,data,thresholds):
     """One session's scored report block, with its own label provenance warning."""
     provenance=annotation.get('label_provenance')
-    human=provenance in HUMAN_PROVENANCES
+    scripted=synthetic_recording(session)
+    human=provenance in HUMAN_PROVENANCES and not scripted
     curve,span_rows=held_curve(data,thresholds)
     spelling=spelling_rows(data)
     data['spelling_pairs']=spelling.pop('pairs')
@@ -515,10 +536,14 @@ def score_session(session,annotation,data,thresholds):
                 frames=session['frame_count'],replayed_frames=data['replayed_frames'],
                 measured_fps=session['measured_fps'],width=session['width'],height=session['height'],
                 label_provenance=provenance,confirmed=annotation.get('confirmed') is True,
+                synthetic_recording=scripted,
                 human_labels=human,numbers_from_suggested_labels=provenance==SUGGESTED_PROVENANCE,
                 label_warning=(None if human else
-                               f'NOT HUMAN LABELS: label_provenance is {provenance!r}. These numbers are not '
-                               'a human accuracy measurement.'),
+                               ('NOT HUMAN LABELS: this recording is scripted (consent says synthetic), so '
+                                'no person produced these frames and no number from it measures accuracy.'
+                                if scripted else
+                                f'NOT HUMAN LABELS: label_provenance is {provenance!r}. These numbers are not '
+                                'a human accuracy measurement.')),
                 annotated_frames_by_span_kind=frames_by_kind,
                 held_letters=dict(app_gate=APP_HANDSHAPE_GATE,thresholds=list(thresholds),curve=curve,
                                   spans_at_app_gate=span_rows,
@@ -582,6 +607,7 @@ def label_fields(blocks):
         provenances[block['label_provenance']]=provenances.get(block['label_provenance'],0)+1
     human=bool(blocks) and all(block['human_labels'] for block in blocks)
     suggested=any(block['numbers_from_suggested_labels'] for block in blocks)
+    scripted=sum(1 for block in blocks if block.get('synthetic_recording'))
     warning=None
     if suggested:
         warning=('UNCONFIRMED LABELS: at least one scored session carries the current model\'s own suggestions '
@@ -590,8 +616,12 @@ def label_fields(blocks):
     elif blocks and not human:
         warning=('NOT HUMAN LABELS: these spans were not confirmed by a person, so this report calibrates the '
                  'harness and the rejection thresholds only, not app accuracy.')
-    return dict(human_labels=human,label_provenances=provenances,numbers_from_suggested_labels=suggested,
-                label_warning=warning)
+    if scripted:
+        warning=(f'{warning} ' if warning else '')+('SCRIPTED RECORDINGS: '
+               f'{scripted} scored session(s) carry consent.synthetic, so their frames were scripted rather '
+               'than signed; their held-letter numbers only prove the scorer works.')
+    return dict(human_labels=human,label_provenances=provenances,synthetic_recordings=scripted,
+                numbers_from_suggested_labels=suggested,label_warning=warning)
 
 
 def collect_sessions(arguments):
@@ -647,13 +677,23 @@ def main():
             if errors:
                 skipped.append(dict(directory=str(directory),reason='annotation is contradictory',problems=errors))
                 continue
-            if arguments.require_human and provenance not in HUMAN_PROVENANCES:
+            if arguments.require_human and (provenance not in HUMAN_PROVENANCES or synthetic_recording(session)):
                 skipped.append(dict(directory=str(directory),
-                                    reason=f'label_provenance={provenance!r} is not a human label')); continue
+                                    reason=(f'label_provenance={provenance!r} is not a human label'
+                                            if provenance not in HUMAN_PROVENANCES else
+                                            'the recording is scripted (consent.synthetic), so no person signed '
+                                            'these frames')))
+                continue
             if provenance==SUGGESTED_PROVENANCE:
                 print(f'WARNING {directory}: scoring unconfirmed model suggestions; the report marks them',flush=True)
             for warning in warnings:
                 print(f'note {directory}: {warning}',flush=True)
+            if arguments.via_worker:
+                gap=video_gap(session)
+                if gap:
+                    skipped.append(dict(directory=str(directory),replay='recognition worker protocol',reason=gap))
+                    print(f'SKIP {directory}: {gap}',flush=True)
+                    continue
             try:
                 if arguments.via_worker:
                     bridge=bridge or WorkerBridge(python=arguments.python,script=ROOT/'scripts/recognition_worker.py')

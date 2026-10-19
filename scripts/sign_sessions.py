@@ -21,9 +21,12 @@ no such class (model/neural.py LETTERS), so those letters are annotated as motio
 
 Consent is recorded per session: the FSboard signers consented and were paid, and our own recordings
 carry the same kind of record. Provenance separates who labelled the spans: only 'human' and
-'human-reviewed-model-suggestions' count as human labels, 'model-suggestion' is an unreviewed draft
-and 'synthetic-fixture' means no person was recorded at all. This format calibrates the app on its
-own domain; numbers from it are not a public benchmark.
+'human-reviewed-model-suggestions' count as human labels, 'model-suggestion' is an unreviewed draft,
+'synthetic-fixture' means no person was recorded at all and 'fsboard-transcript' means the only label
+is the published clip transcript, so span timing comes from hand presence rather than from anyone
+reading the recording. A session whose consent record says synthetic can never yield a human label,
+even after a person confirms its draft spans: confirming what a scripted track does is not a person
+signing. This format calibrates the app on its own domain; numbers from it are not a public benchmark.
 """
 import json
 from pathlib import Path
@@ -36,9 +39,12 @@ ANNOTATION_SCHEMA='asl-shop-sign-annotation/v1'
 SPAN_KINDS=('held','idle','activity','motion','spelling','transition')
 MOTION_LETTERS=frozenset('JZ')
 SPAN_KEYS=frozenset(('kind','start','end','letter','text','suggestion_confidence','note'))
-KNOWN_PROVENANCES=frozenset(('human','human-reviewed-model-suggestions','model-suggestion','synthetic-fixture'))
-HUMAN_PROVENANCES=frozenset(('human','human-reviewed-model-suggestions'))
 SUGGESTED_PROVENANCE='model-suggestion'
+SYNTHETIC_PROVENANCE='synthetic-fixture'
+TRANSCRIPT_PROVENANCE='fsboard-transcript'  # the published clip transcript is the only label here
+KNOWN_PROVENANCES=frozenset(('human','human-reviewed-model-suggestions',SUGGESTED_PROVENANCE,
+                             SYNTHETIC_PROVENANCE,TRANSCRIPT_PROVENANCE))
+HUMAN_PROVENANCES=frozenset(('human','human-reviewed-model-suggestions'))
 SESSION_FILE='session.json'
 LANDMARKS_FILE='landmarks.npz'
 ANNOTATION_FILE='annotation.json'
@@ -123,6 +129,12 @@ def write_annotation(directory,annotation,*,draft=False):
     return annotation
 
 
+def synthetic_recording(session):
+    """True when the recording itself is scripted, whatever the annotation claims about its spans."""
+    consent=session.get('consent')
+    return isinstance(consent,dict) and consent.get('synthetic') is True
+
+
 def validate(session,annotation):
     """Return (errors, warnings). Errors mean the annotation contradicts itself or the recording."""
     from model.neural import HANDSHAPES,VOCAB
@@ -144,8 +156,18 @@ def validate(session,annotation):
     elif provenance==SUGGESTED_PROVENANCE:
         warnings.append('DRAFT: these spans are model suggestions, not labels. Confirm them with '
                         'scripts/label_sign_session.py --confirm before quoting any accuracy number.')
-    if provenance=='synthetic-fixture':
+    if provenance==SYNTHETIC_PROVENANCE:
         warnings.append('synthetic fixture: no person was recorded, so scores calibrate the harness only.')
+    if provenance==TRANSCRIPT_PROVENANCE:
+        warnings.append('transcript-derived spans: the published clip transcript is the label, and span timing '
+                        'comes from hand presence, so no person read this recording. Held-letter and rejection '
+                        'numbers from such a session are a plumbing check, never signer accuracy.')
+    if synthetic_recording(session):
+        warnings.append('the consent record says this recording is synthetic (scripted landmarks, no person).')
+        if provenance in HUMAN_PROVENANCES:
+            warnings.append(f'label_provenance={provenance!r} on a synthetic recording: a person confirming what '
+                            'a script did is not a signer, so no number scored from this may be quoted as '
+                            'human accuracy.')
     if not spans:
         warnings.append('annotation has no spans.')
     letters=set(HANDSHAPES[1:])
@@ -300,6 +322,13 @@ def frame_span_map(annotation,n_frames):
 FIXTURE_PLAN=(('idle',20,''),('held',24,'A'),('transition',6,'B'),('held',24,'B'),('transition',6,'K'),
               ('held',24,'K'),('idle',20,''),('activity',24,''),('idle',12,''),('motion',30,'J'),
               ('idle',12,''),('spelling',18,'HUG'),('idle',12,''),('motion',30,'Z'),('idle',20,''))
+# A second scripted session: more held letters, two pairs people actually confuse (N/M, P/R), two held
+# spans back to back with no travel between them, a longer spelling run and a longer activity block.
+HARD_FIXTURE_PLAN=(('idle',20,''),('held',24,'M'),('transition',6,'N'),('held',24,'N'),('transition',6,'P'),
+                   ('held',24,'P'),('transition',6,'R'),('held',24,'R'),('idle',15,''),('held',24,'A'),
+                   ('held',24,'B'),('idle',20,''),('activity',30,''),('idle',12,''),('motion',30,'J'),
+                   ('idle',12,''),('spelling',15,'HELLO'),('idle',15,''),('motion',30,'Z'),('idle',15,''))
+FIXTURE_PLANS=dict(easy=FIXTURE_PLAN,hard=HARD_FIXTURE_PLAN)
 FIXTURE_TRAVEL_FRAMES=6
 
 
@@ -392,14 +421,14 @@ def make_synthetic_session(directory,*,session_id='synthetic-fixture-1',fps=30.0
     directory=Path(directory)
     write_session(directory,session_id=session_id,signer_id=f'synthetic-signer-{session_id}',
                   right=right,left=left,present=present,timestamps_ms=timestamps_ms,width=width,height=height,
-                  fps=fps,consent={'granted':True,'recorded_at':time.strftime('%Y-%m-%d'),
+                  fps=fps,consent={'granted':True,'recorded_at':time.strftime('%Y-%m-%d'),'synthetic':True,
                                    'note':'Synthetic fixture: scripted landmark tracks, no person was '
                                          'recorded and nothing was paid.'},
                   notes='Scripted fixture for held-letter harness self-checks; see scripts/sign_sessions.py '
                         'make_synthetic_session.')
     write_annotation(directory,dict(schema=ANNOTATION_SCHEMA,session_id=session_id,
                                     signer_id=f'synthetic-signer-{session_id}',confirmed=True,
-                                    label_provenance='synthetic-fixture',labelled_at=time.strftime('%Y-%m-%d'),
+                                    label_provenance=SYNTHETIC_PROVENANCE,labelled_at=time.strftime('%Y-%m-%d'),
                                     labels_by='fixture generator (not a human)',spans=spans))
     return dict(directory=directory,frame_count=n_frames,
                 held=[span['letter'] for span in spans if span['kind']=='held'],
