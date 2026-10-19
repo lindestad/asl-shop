@@ -288,6 +288,9 @@ def quality_block(tallies, groups, matches, rule, clips):
     accepted = sum(1 for clip in clips if clip['accepted'])
     exact_total = sum(1 for clip in clips if clip['exact_match'])
     prefix_total = sum(1 for clip in clips if clip['prefix_match'])
+    group_sizes = {}
+    for clip in clips:
+        group_sizes[clip['set']] = group_sizes.get(clip['set'], 0) + 1
     return dict(overall=tallies['overall'].summary(),
                 groups={name: tally.summary() for name, tally in groups.items()},
                 rule=rule, accepted_clips=accepted, rejected_clips=len(clips) - accepted,
@@ -295,8 +298,9 @@ def quality_block(tallies, groups, matches, rule, clips):
                 exact_match_clips=exact_total, prefix_match_clips=prefix_total,
                 exact_match_rate=exact_total / len(clips) if clips else None,
                 prefix_match_rate=prefix_total / len(clips) if clips else None,
-                match_rate_by_group={name: dict(exact=values[0] / len(clips) if clips else None,
-                                                prefix=values[1] / len(clips) if clips else None)
+                match_rate_by_group={name: dict(clips=group_sizes.get(name, 0),
+                                                exact=values[0] / group_sizes[name] if group_sizes.get(name) else None,
+                                                prefix=values[1] / group_sizes[name] if group_sizes.get(name) else None)
                                      for name, values in matches.items()})
 
 
