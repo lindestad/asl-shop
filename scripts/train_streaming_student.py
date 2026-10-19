@@ -37,11 +37,16 @@ distills blank/nothing frames).  --no-distill drops the KL term, --no-frame-labe
 per-frame loss entirely, so the two ablations isolate soft labels and teacher frame labels.
 
 Real runs (VPS V100-SXM3; 61 frames reproduces the shipped model's parameter count exactly, so the
-distill/no-distill pair is a fixed-latency comparison):
+distill/no-distill pair is a fixed-latency comparison).  Headline teacher pairing: our own
+gaps-timeline recogniser (data/models/openfs-recognizer-gaps/recognizer.pt, validation CER 7.08%)
+consumes the same 91-channel gap-preserving timeline as the student, so teacher posteriors land on
+packed rows directly and the compressed<->gaps index mapping is not exercised; the released
+checkpoint with --teacher-input-representation compressed is the tested alternative that does
+exercise it.  Same --seed and --limit-clips make the two 61-frame arms see identical clips:
 
-  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --refined-labels data/openfs-refined --teacher data/openfs-checkpoints/recognizer_fsboard --frame-classifier data/openfs-checkpoints/frame_classifier_fsboard --openfs-source data/external/openfs/source --trusted-teacher --receptive-frames 61 --limit-clips 40000 --epochs 30 --output data/models/streaming-student-61/student.pt --report data/streaming-student-61.report.json
-  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --refined-labels data/openfs-refined --teacher data/openfs-checkpoints/recognizer_fsboard --frame-classifier data/openfs-checkpoints/frame_classifier_fsboard --openfs-source data/external/openfs/source --trusted-teacher --receptive-frames 61 --no-distill --limit-clips 40000 --epochs 30 --output data/models/streaming-student-61-nodelearn/student.pt --report data/streaming-student-61-nodelearn.report.json
-  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --refined-labels data/openfs-refined --teacher data/openfs-checkpoints/recognizer_fsboard --frame-classifier data/openfs-checkpoints/frame_classifier_fsboard --openfs-source data/external/openfs/source --trusted-teacher --receptive-frames 200 600 --limit-clips 40000 --epochs 30 --output data/models/streaming-student-sweep/student.pt --report data/streaming-student-sweep.report.json
+  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --refined-labels data/openfs-refined --teacher data/models/openfs-recognizer-gaps/recognizer.pt --teacher-input-representation gaps --teacher-channels 91 --teacher-positions auto --frame-classifier data/openfs-checkpoints/frame_classifier_fsboard --openfs-source data/external/openfs/source --teacher-cache data/streaming-student-teacher-gaps.npz --receptive-frames 61 --limit-clips 20000 --epochs 30 --output data/models/streaming-student-rf61-distill/student.pt --report data/streaming-student-rf61-distill.report.json
+  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --refined-labels data/openfs-refined --no-distill --receptive-frames 61 --limit-clips 20000 --epochs 30 --output data/models/streaming-student-rf61-nodelearn/student.pt --report data/streaming-student-rf61-nodelearn.report.json
+  .venv/bin/python scripts/train_streaming_student.py --data data/openfs-packed --refined-labels data/openfs-refined --teacher data/models/openfs-recognizer-gaps/recognizer.pt --teacher-input-representation gaps --teacher-channels 91 --teacher-positions auto --frame-classifier data/openfs-checkpoints/frame_classifier_fsboard --openfs-source data/external/openfs/source --teacher-cache data/streaming-student-teacher-gaps.npz --receptive-frames 200 600 --limit-clips 20000 --epochs 30 --output data/models/streaming-student-sweep/student.pt --report data/streaming-student-sweep.report.json
 
 Evaluate an existing student (same metric path, no training) and merge rows into one table:
 
@@ -74,6 +79,7 @@ from torch.nn import functional as F
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from model.neural import CONTRACT,HANDSHAPES,VOCAB,FingerspellingNet,decode_ctc,load_checkpoint
+from model.offline_recognizer import PAD_SEG
 from model.recognition_metrics import ErrorTally
 from scripts.prepare_openfs_labels_v3 import CONTRACT_V3,UPSTREAM_CHARS,refined_lookup,upstream_target
 from scripts.train_openfs import read_data
@@ -173,7 +179,10 @@ def teacher_tokens(values,representation,hand=None,positions='arange',channels=4
     increasing frame order, bbox-normalised +-0.5 landmarks, segment 0, arange index, so a 30-frame
     detection gap disappears from the index.
     gaps: either every packed row (91 channels, hand identity as segment) or that hand's
-    detections (42 channels), positioned by the accumulated column-90 deltas so gaps survive."""
+    detections (42 channels), positioned by the accumulated column-90 deltas so gaps survive.
+    positions: 'arange' (compressed detection order), 'timeline' (raw accumulated frame index,
+    what scripts/train_openfs_recognizer.py trained the gaps recogniser on) or 'rebased' (the same
+    index shifted so the clip starts at 0, what scripts/finetune_openfs_transfer.py used)."""
     right,left=detected_rows(values,0),detected_rows(values,45)
     if hand is None: hand=0 if len(right)>=len(left) else 1
     base,track=((0,right) if hand==0 else (45,left))
@@ -208,13 +217,16 @@ def student_rows(rows,length):
     return result
 
 
-def padded_teacher(sets,channels):
+def padded_teacher(sets,channels,pad_segment=0):
     """Batch teacher tokens with the upstream sentinels (-2 pose, 1024 position).  Each clip's
     student rows stay in their own list, never inside a padded array, so a pad slot has no
-    student-row meaning at all."""
+    student-row meaning at all.  `pad_segment` matters: the released model masks pads by the -2
+    pose sentinel, but our own Recognizer masks only segments==PAD_SEG, so a recognizer-kind
+    teacher must pad with 32 or garbage pose tokens would sit unmasked inside the encoder's
+    self-attention and contaminate the real tokens' memory."""
     longest=max((len(pose) for pose,_,_,_ in sets),default=0)
     poses=np.full((len(sets),longest,channels),-2,dtype=np.float32)
-    segments=np.zeros((len(sets),longest),dtype=np.int64)
+    segments=np.full((len(sets),longest),pad_segment,dtype=np.int64)
     positions=np.full((len(sets),longest),1024,dtype=np.float64)
     rows=[]
     for position,(pose,segment,index,student) in enumerate(sets):
@@ -265,6 +277,24 @@ def class_matrix():
     return table
 
 
+def resolve_teacher_positions(kind,recorded,requested):
+    """Which positional index the teacher was trained on, so --teacher-positions auto cannot leak
+    'auto' into teacher_tokens (an unknown value silently selects the timeline branch there).
+    upstream: arange detection order.  Our gaps recogniser (scripts/train_openfs_recognizer.py):
+    raw accumulated frame deltas, not rebased.  Fine-tuned gaps42/gaps91 adapters
+    (scripts/finetune_openfs_transfer.py): the same deltas rebased per hand.  compressed/control42:
+    arange."""
+    if requested!='auto':
+        return requested
+    if kind=='upstream':
+        return 'arange'
+    if recorded=='gaps':
+        return 'timeline'
+    if recorded in ('gaps42','gaps91'):
+        return 'rebased'
+    return 'arange'
+
+
 def load_teacher(args):
     """Released recogniser or a fine-tuned teacher, plus the released per-frame classifier head.
     Research-only: reachable only from this script, and never from anything under model/."""
@@ -299,17 +329,20 @@ def load_teacher(args):
         network.load_state_dict(torch.load(weights,map_location='cpu',weights_only=True),strict=True)
         payload=None
         kind='upstream'
+        recorded=None
         channels=42
     else:
         payload=torch.load(teacher,map_location='cpu',weights_only=True)
-        if payload.get('contract')==CONTRACT:
-            raise ValueError(f'{teacher} is an app model, not a teacher; a research-only teacher has '
-                             'no app contract (see scripts/finetune_openfs_transfer.py).')
+        if payload.get('task')=='sequence':
+            raise ValueError(f'{teacher} is an app model, not a teacher; only the app\'s own '
+                             'task="sequence" checkpoints carry the runtime contract '
+                             '(see scripts/finetune_openfs_transfer.py).')
         from model.offline_recognizer import Recognizer
         architecture=payload['architecture']
         network=Recognizer(input_dim=architecture['input_dim'],d_model=architecture['d_model'],
                            heads=architecture['heads'],layers=architecture['layers'],
-                           feedforward=architecture['feedforward'])
+                           feedforward=architecture['feedforward'],
+                           dropout=architecture.get('dropout',.1))
         network.load_state_dict(payload['state_dict'],strict=True)
         weights=teacher
         kind='recognizer'
@@ -322,9 +355,8 @@ def load_teacher(args):
                                               f'{recorded} representation, but '
                                               f'--teacher-input-representation={args.teacher_input_representation}.')),
                           flush=True)
-            if args.teacher_positions=='auto':
-                provenance['positions']='rebased' if recorded in ('gaps42','gaps91') else 'arange'
             provenance['trained_representation']=recorded
+    provenance['positions']=resolve_teacher_positions(kind,recorded,args.teacher_positions)
     if channels==42 and args.teacher_input_representation=='gaps' and args.teacher_channels=='auto':
         channels=42
     if args.teacher_channels!='auto': channels=args.teacher_channels
@@ -365,7 +397,8 @@ def load_teacher(args):
                              'upstream_source':str(source) if source else None})
     return dict(network=network,classifier=classifier,kind=kind,channels=channels,payload=payload,
                 representation=args.teacher_input_representation,
-                positions=provenance['positions'],provenance=provenance)
+                positions=provenance['positions'],provenance=provenance,
+                pad_segment=0 if kind=='upstream' else PAD_SEG)
 
 
 def teacher_memory(teacher,poses,segments,positions):
@@ -428,7 +461,8 @@ def teacher_posteriors(teacher,data,order,hand_of=None,*,batch_size=32,token_bud
             sets.append((index,poses,segments,positions,rows))
         if not sets:
             continue
-        poses,segments,positions,rows=padded_teacher([set_[1:] for set_ in sets],teacher['channels'])
+        poses,segments,positions,rows=padded_teacher([set_[1:] for set_ in sets],teacher['channels'],
+                                                     teacher.get('pad_segment',0))
         memory=teacher_memory(teacher,poses,segments,positions)
         probabilities=teacher['classifier'](memory).float().softmax(-1).cpu().numpy()
         for position,(index,_,_,_,student) in enumerate(sets):
@@ -937,7 +971,9 @@ def main():
                         help='required to load the research-licensed released checkpoint here')
     parser.add_argument('--teacher-input-representation',choices=('compressed','gaps'),
                         default='compressed')
-    parser.add_argument('--teacher-positions',choices=('auto','arange','rebased'),default='arange')
+    parser.add_argument('--teacher-positions',choices=('auto','arange','rebased','timeline'),
+                        default='arange',help='which positional index the teacher consumes; '
+                        'auto reads it off the checkpoint provenance')
     parser.add_argument('--teacher-channels',choices=('auto','42','91'),default='auto')
     parser.add_argument('--receptive-frames',type=int,nargs='+',default=[61],
                         help='causal receptive field(s) in model-grid frames to train; several '
