@@ -5,6 +5,7 @@
   "splits": {
     "test": "packed FSboard test split for every row: 12,521 clips, 221,100 reference characters, greedy CTC, no dictionary or language correction"
   },
+  "artifact_paths_note": "the pack and checkpoint fields on each row record the paths as they were at run time, inside the run's worktree data directory. Those directories now live under ~/asl-data/ with the same names, and symlinks stand at the recorded paths, so the recorded paths still resolve.",
   "rows": [
     {
       "row": "baseline (shipped app checkpoint)",

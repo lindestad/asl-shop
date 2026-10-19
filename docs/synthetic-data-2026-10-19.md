@@ -146,9 +146,14 @@ with each other: same seed 42, same shipped recipe (`train_openfs.py` sequence t
 `models/neural-2026-10-12/handshape.pt`, 30 epochs, hidden 192, batch 64, amp), all on the V100, all
 scored on the identical 12,521-clip packed test split by `scripts/evaluate_synthetic_mix.py`. The
 shipped checkpoint is listed first for orientation; the retrained real-only baseline is the honest
-comparator because it was fit on the same VPS, same venv, same seed. Four arms plus four test-split
-evaluations took 3 h 50 m of V100 wall time end to end, about twelve times the time it takes to
-generate the data, which tells you where to spend the next experiment.
+comparator because it was fit on the same VPS, same venv, same seed. That shipped row is also an
+agreement check between two scoring paths: `scripts/evaluate_synthetic_mix.py` puts it at 13.541%
+CER with 16,819/6,552/6,569 edits and 2,267 exact strings, where `scripts/eval_recognition.py`
+scored the same file at 13.542% with 16,803/6,553/6,586 and the same 2,267 exact
+(`data/lm-rescoring-vps.report.json`), so the two harnesses differ by 2 edit operations out of
+221,100 characters. Four arms plus four test-split evaluations took 3 h 50 m of V100 wall time end
+to end, about twelve times the time it takes to generate the data, which tells you where to spend
+the next experiment.
 
 | Row | Test CER | Exact strings | Del/Sub/Ins | CER on J/Z clips | Exact on J/Z clips | s/epoch |
 |---|---:|---:|---:|---:|---:|---:|
@@ -251,17 +256,26 @@ inferred.
 
 ## Files written by this experiment
 
-VPS (research-only namespaces only):
+All of it is in the research-only namespaces on the training box. The generated sets, the merged
+packs and their reports were written under the run's worktree `data/` directory while they ran, and
+have since been moved into `~/asl-data/` with symlinks left at the old paths, so they outlive the
+worktree:
 
-- `~/asl-data/openfs-synthetic-pilot`, `-pilot-prefix`, `-words`, `-letters` with
-  `poses.npy`, `frame_labels.npy`, `clips.json`, `words/`, `provenance.json` and a sibling
-  `.report.json` each;
-- `~/asl-data/openfs-synthetic-packed-mix15k`, `-mixall`, `-letters` packs plus
-  `.report.json` each;
+- `~/asl-data/openfs-synthetic-pilot`, `-pilot-prefix`, `-words`, `-letters` with `poses.npy`,
+  `frame_labels.npy`, `clips.json`, `words/`, `provenance.json` and a sibling `.report.json` each.
+  The word run's poses are 725 MB, the letters run's 1.2 MB;
+- `~/asl-data/openfs-synthetic-packed-mix15k`, `-mixall`, `-letters` packs plus `.report.json`
+  each, as `dataset.json` with `train`/`validation`/`test` clips, frames and targets. The
+  validation and test files in all three are hardlinks into `~/asl-data/openfs-packed`, so they
+  share those bytes;
 - `~/asl-data/models/synthetic-{baseline,mix15k,mixall,mixletters}/sequence.pt` and the matching
   `sequence.report.json`;
-- `~/asl-wt/synthetic-generator/data/openfs-synthetic-*.evaluate.report.json` for the test-split
-  subsets, and `logs/{gen-words,gen-letters,train-chain}.log`.
+- `~/asl-data/openfs-synthetic-{baseline,baseline-shipped,mix15k,mixall,mixletters}.evaluate.report.json`
+  for the test-split subsets;
+- `~/asl-wt/synthetic-generator/logs/{pilot,gen-words,gen-letters,train-chain}.log`.
+
+The generation, pack, training and evaluation report JSONs are also copied into this checkout's
+gitignored `data/` directory, and the headline rows are in `docs/synthetic-data-metrics-2026-10-19.json`.
 
 The packs, the four training arms and the five test-split scorings ran from
 `scripts/run_synthetic_training.sh`, committed with this document, one GPU process at a time. The
