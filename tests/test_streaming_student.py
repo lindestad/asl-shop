@@ -12,7 +12,9 @@ pin the properties the accuracy-versus-latency result rests on:
 - wall-clock latency is measured only by scripts/benchmark_neural.py, which really does accept a
   student checkpoint through the live streaming runtime;
 - a whole study run end to end on synthetic packed clips: checkpoint naming, report columns, the
-  research_only/distilled_from provenance, evaluate-only mode and the merged summary table.
+  research_only/distilled_from provenance, evaluate-only mode and the merged summary table;
+- the published study artifacts in docs/ stay arithmetically self-consistent and agree with the
+  writeup they summarise.
 
 The released teacher constructors live in the pinned upstream checkout and the weights are not in
 this repo, so load_teacher/teacher_posteriors themselves are exercised on the VPS, not here.
@@ -175,6 +177,31 @@ class IndexMap(unittest.TestCase):
         with self.assertRaises(ValueError):
             s.padded_teacher(sets, 91)                           # wrong channel width caught
 
+    def test_padded_slots_for_a_recognizer_teacher_use_the_maskable_segment(self):
+        # our model/offline_recognizer masks padding only via segments==PAD_SEG(32), unlike the
+        # released model which masks by the -2 pose sentinel; the gaps teacher runs on VPS would
+        # otherwise attend to garbage pose tokens from inside every real token's memory.
+        s = self.s
+        sets = [(np.ones((3, 42), dtype=np.float32), np.zeros(3, dtype=np.int64),
+                 np.arange(3, dtype=np.float64), np.array([0, 2, 5])),
+                (np.ones((1, 42), dtype=np.float32), np.zeros(1, dtype=np.int64),
+                 np.zeros(1, dtype=np.float64), np.array([1]))]
+        poses, segments, positions, rows = s.padded_teacher(sets, 42, pad_segment=32)
+        np.testing.assert_array_equal(segments[1, 1:], 32)          # pad slots become maskable
+        np.testing.assert_array_equal(segments[0], 0)               # real tokens keep their own id
+        np.testing.assert_array_equal(segments[1, :1], 0)
+        np.testing.assert_array_equal(s.padded_teacher(sets, 42)[1][1, 1:], 0)  # released default
+
+    def test_timeline_positions_are_the_raw_frame_index_the_gaps_recogniser_consumes(self):
+        # scripts/train_openfs_recognizer.py trains the gaps recogniser on raw timeline_indices
+        # (not rebased); feeding it rebased or arange positions shifts its sinusoidal index.
+        s = self.s
+        values = packed_values(rows=6, present=(0, 1, 4))
+        values[3, 90] = 2 / 30
+        _, _, positions, rows = s.teacher_tokens(values, 'gaps', channels=91, positions='timeline')
+        np.testing.assert_allclose(positions, s.timeline_indices(values))
+        np.testing.assert_allclose(positions, [1., 2., 3., 5., 6., 7.])  # doubled delta widens
+
     def test_augmented_resampling_glues_teacher_rows_to_the_resampled_timeline(self):
         s = self.s
         rows, probabilities = s.align_rows(np.array([0, 3, 9]), np.ones((3, 2)), np.arange(10), 10)
@@ -202,6 +229,123 @@ class IndexMap(unittest.TestCase):
         posterior = np.full((2, s.TEACHER_CLASSES), 1 / s.TEACHER_CLASSES)
         mapped = posterior @ matrix
         self.assertAlmostEqual(float(mapped.sum()), 2 * len(s.UPSTREAM_CHARS) / s.TEACHER_CLASSES)
+
+
+class TeacherPositions(unittest.TestCase):
+    """--teacher-positions auto must read the index the teacher was actually trained on; an
+    unresolved 'auto' leaking into teacher_tokens silently selects the timeline branch."""
+
+    def test_auto_reads_the_trained_index_off_the_checkpoint(self):
+        s = load_script()
+        self.assertEqual(s.resolve_teacher_positions('upstream', None, 'auto'), 'arange')
+        self.assertEqual(s.resolve_teacher_positions('recognizer', 'gaps', 'auto'), 'timeline')
+        self.assertEqual(s.resolve_teacher_positions('recognizer', 'gaps42', 'auto'), 'rebased')
+        self.assertEqual(s.resolve_teacher_positions('recognizer', 'gaps91', 'auto'), 'rebased')
+        self.assertEqual(s.resolve_teacher_positions('recognizer', 'compressed', 'auto'), 'arange')
+        self.assertEqual(s.resolve_teacher_positions('recognizer', 'control42', 'auto'), 'arange')
+        self.assertEqual(s.resolve_teacher_positions('recognizer', None, 'auto'), 'arange')
+
+    def test_an_explicit_choice_is_never_overridden(self):
+        s = load_script()
+        for requested in ('arange', 'rebased', 'timeline'):
+            self.assertEqual(s.resolve_teacher_positions('recognizer', 'gaps', requested),
+                             requested)
+            self.assertEqual(s.resolve_teacher_positions('upstream', None, requested), requested)
+
+
+class TeacherPayload(unittest.TestCase):
+    """The app-model guard keys on task, not on the contract key: our own retrained OpenFS-recipe
+    recognisers carry the contract (scripts/train_openfs_recognizer.py) and are valid teachers."""
+
+    def _args(self, teacher):
+        return argparse.Namespace(teacher=teacher, openfs_source=None, trusted_teacher=False,
+                                  teacher_input_representation='gaps', teacher_positions='auto',
+                                  teacher_channels='auto',
+                                  frame_classifier=teacher.parent / 'no-frame-classifier',
+                                  device='cpu')
+
+    def test_recognizer_checkpoints_carrying_the_contract_are_teachers_not_app_models(self):
+        s = load_script()
+        sys.path.insert(0, str(REPO))
+        from model.offline_recognizer import Recognizer
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'recognizer.pt'
+            network = Recognizer(input_dim=91, d_model=8, heads=2, layers=1, feedforward=16)
+            torch.save(dict(contract=s.CONTRACT, task='recognizer', representation='gaps',
+                            architecture=dict(input_dim=91, d_model=8, heads=2, layers=1,
+                                              feedforward=16, dropout=0.1),
+                            state_dict=network.state_dict()), path)
+            with self.assertRaises(ValueError) as caught:                    # stops at the classifier
+                s.load_teacher(self._args(path))
+        message = str(caught.exception)
+        self.assertNotIn('app model', message)
+        self.assertIn('frame classifier checkpoint is missing', message)    # the task guard passed
+
+    def test_a_file_teacher_without_openfs_source_names_the_classifier_gap(self):
+        # the released frame-classifier constructor is imported even for a file-path teacher,
+        # which used to raise UnboundLocalError instead of naming the missing --openfs-source
+        s = load_script()
+        sys.path.insert(0, str(REPO))
+        from model.offline_recognizer import Recognizer
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'recognizer.pt'
+            network = Recognizer(input_dim=91, d_model=8, heads=2, layers=1, feedforward=16)
+            torch.save(dict(contract=s.CONTRACT, task='recognizer', representation='gaps',
+                            architecture=dict(input_dim=91, d_model=8, heads=2, layers=1,
+                                              feedforward=16, dropout=0.1),
+                            state_dict=network.state_dict()), path)
+            classifier = Path(directory) / 'frame_classifier'
+            classifier.mkdir()
+            (classifier / 'best_model.pth').write_bytes(b'not a checkpoint')     # weights present
+            args = self._args(path)
+            args.frame_classifier = classifier
+            with self.assertRaises(ValueError) as caught:
+                s.load_teacher(args)
+        self.assertIn('--openfs-source', str(caught.exception))
+
+    def test_app_sequence_checkpoints_are_still_refused_as_teachers(self):
+        s = load_script()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'sequence.pt'
+            torch.save(dict(contract=s.CONTRACT, task='sequence'), path)
+            with self.assertRaises(ValueError) as caught:
+                s.load_teacher(self._args(path))
+        self.assertIn('app model', str(caught.exception))
+
+
+class TeacherCache(unittest.TestCase):
+    """The longer-rf runs rerun on a cached teacher pass, so the ragged records must round-trip."""
+
+    def test_ragged_posterior_records_survive_the_cache_round_trip(self):
+        s = load_script()
+        with tempfile.TemporaryDirectory() as directory:
+            data = {'clips': [{'name': f'c{i}'} for i in range(3)]}
+
+            def fake(teacher, data, order):   # rows length == posterior rows: np.array() would
+                return ({int(i): (np.arange(4 + 2 * int(i), dtype=np.int32),            # crash
+                                  np.full((4 + 2 * int(i), 5), int(i), np.float16))      # and
+                         for i in (2, 0, 1)}, {'clips': 3})  # insertion order != sorted order:
+                # a writer that pairs sorted names with insertion-ordered records mis-glues clips
+
+            args = argparse.Namespace(data=Path(directory) / 'pack',
+                                      teacher_cache=Path(directory) / 'teacher.npz')
+            teacher = {'provenance': {'paths': {'teacher': 'weights'}}, 'representation': 'compressed',
+                       'positions': 'arange', 'channels': 42}
+            original = s.teacher_posteriors
+            s.teacher_posteriors = fake
+            try:
+                posteriors, stats = s.teacher_posteriors_cached(args, teacher, data, [0, 1, 2])
+                self.assertEqual(stats['cache'], 'miss')
+                cached, stats = s.teacher_posteriors_cached(args, teacher, data, [0, 1, 2])
+                self.assertEqual(stats['cache'], 'hit')
+                self.assertEqual(sorted(posteriors), sorted(cached))
+                for index in posteriors:
+                    np.testing.assert_array_equal(posteriors[index][0], cached[index][0])
+                    np.testing.assert_allclose(posteriors[index][1], cached[index][1])
+                _, stats = s.teacher_posteriors_cached(args, teacher, data, [0, 1])  # other subset
+                self.assertEqual(stats['cache'], 'miss')
+            finally:
+                s.teacher_posteriors = original
 
 
 class ReceptiveField(unittest.TestCase):
@@ -642,6 +786,64 @@ class StudyPipeline(unittest.TestCase):
             self.assertEqual(second['receptive_field_frames'], 61)
             self.assertEqual(second['cer'], 0.13)
             self.assertIsNone(second.get('arrival_p50_ms_best'))   # no benchmark file given
+
+
+class PublishedMeasurements(unittest.TestCase):
+    """The 2026-10-19 study artifacts in docs/ are the answer to the accuracy-versus-latency
+    question, so they are checked against themselves: rows internally consistent, the
+    fixed-latency pair actually fixed-latency, and the prose table agreeing with the JSON."""
+
+    METRICS = REPO / 'docs' / 'streaming-latency-metrics-2026-10-19.json'
+    NOTES = REPO / 'docs' / 'streaming-latency-2026-10-19.md'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.document = json.loads(cls.METRICS.read_text(encoding='utf-8'))
+        cls.rows = {row['config']: row for row in cls.document['rows']}
+
+    def test_every_row_is_arithmetic_that_adds_up(self):
+        self.assertEqual(len(self.document['rows']), 5)
+        for config, row in self.rows.items():
+            with self.subTest(config=config):
+                errors = row['deletions'] + row['substitutions'] + row['insertions']
+                self.assertAlmostEqual(row['cer'] * row['characters'], errors, delta=1.0)
+                self.assertAlmostEqual(row['letter_accuracy'], 1 - row['cer'], places=9)
+                self.assertAlmostEqual(row['deletion_rate'] * row['characters'],
+                                       row['deletions'], delta=1.0)
+                self.assertEqual(row['clips'], 12521)               # the packed FSboard test split
+                self.assertEqual(row['characters'], 221100)
+                self.assertEqual(row['buffered_model_frames_required'],
+                                 row['receptive_field_frames'])
+                self.assertIsNotNone(row['arrival_p50_ms_best'])    # every row is priced
+
+    def test_the_fixed_latency_pair_differs_only_by_the_kl_term(self):
+        distilled, plain = self.rows['rf61-distill'], self.rows['rf61-no-distill']
+        for field in ('parameters', 'dilations', 'receptive_field_frames',
+                      'buffered_model_frames_required', 'algorithmic_latency_ms_at_15hz'):
+            self.assertEqual(distilled[field], plain[field], field)
+        self.assertTrue(distilled['distillation'])
+        self.assertFalse(plain['distillation'])
+        # same architecture and shape, so per-arrival CPU cost cannot differ by construction
+        self.assertLess(abs(distilled['arrival_p50_ms_best'] - plain['arrival_p50_ms_best']), .5)
+        self.assertLess(plain['cer'], distilled['cer'])             # measured: distillation cost CER
+
+    def test_longer_history_costs_time_and_bought_nothing_in_accuracy(self):
+        arms = [self.rows[name] for name in ('rf61-distill', 'rf201-distill', 'rf601-distill')]
+        buffered = [row['buffered_model_frames_required'] for row in arms]
+        self.assertEqual(buffered, [61, 201, 601])
+        self.assertEqual([row['arrival_p50_ms_best'] for row in arms],
+                         sorted(row['arrival_p50_ms_best'] for row in arms))
+        for row, frames in zip(arms, buffered):
+            self.assertAlmostEqual(row['history_ms_on_model_grid'], frames * 1000 / 30, delta=50)
+        widest, narrowest = arms[-1], arms[0]
+        self.assertLess(abs(widest['cer'] - narrowest['cer']), .01)  # flat across a 10x field
+
+    def test_the_writeup_table_matches_the_machine_readable_rows(self):
+        notes = self.NOTES.read_text(encoding='utf-8')
+        for config, row in self.rows.items():
+            with self.subTest(config=config):
+                self.assertIn(f"{row['cer'] * 100:.2f}", notes)
+                self.assertIn(f"{row['arrival_p50_ms_best']:.2f}", notes)
 
 
 if __name__ == '__main__':
