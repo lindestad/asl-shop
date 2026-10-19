@@ -123,9 +123,13 @@ around 530 to 900 clips/s.
 Licence. The released weights and everything fit on FSboard data are research-only: "Commercial
 use of the source code, model checkpoints, or derivative works is strictly prohibited"
 (`data/external/openfs/source/LICENSE`, restated in `data/openfs-checkpoints/*/PROVENANCE.json`).
-Nothing described here may ship in the app. Our own checkpoints carry the contract keys the app
-loader expects, so nothing currently prevents them being loaded into a build; a research-only
-guard in the loader is worth having before anything approaches a release.
+Daniel ruled on 19 October that this project is research work rather than a commercial one, so that
+term covers the runs on this page instead of blocking them. It does rule out a build with
+commercial intent carrying any of these weights or anything fit on FSboard data, and if that
+direction ever changes the models here have to be retrained from licensed data. Our own checkpoints
+carry the contract keys the app loader expects, so nothing currently prevents them being loaded
+into a packaged build; a research-only guard in the loader would make the separation enforced
+rather than intended, which is worth doing before the question comes up again.
 
 These are not human-domain numbers. Every figure above is scored against FSboard transcripts of
 other people's recordings, at clip level. The app-domain measurement the repo has been asking for
