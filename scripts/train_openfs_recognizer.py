@@ -318,6 +318,8 @@ def main():
     p.add_argument('--learning-rate',type=float,default=.0001)
     p.add_argument('--lr-step',type=int,default=80)
     p.add_argument('--lr-gamma',type=float,default=.1)
+    p.add_argument('--lr-schedule',choices=['step','cosine'],default='step')
+    p.add_argument('--warmup-epochs',type=int,default=0)
     p.add_argument('--ce-weight',type=float,default=1.)
     p.add_argument('--entropy-weight',type=float,default=.8)
     p.add_argument('--monotonicity-weight',type=float,default=1.)
@@ -403,7 +405,17 @@ def main():
         print(json.dumps({k:baseline[k] for k in ('split','cer','letter_accuracy','exact_sequence_accuracy','seconds')}),flush=True)
     optimizer=torch.optim.Adam(model.parameters(),lr=args.learning_rate)
     scaler=torch.amp.GradScaler('cuda',enabled=args.amp=='fp16')
-    scheduler=torch.optim.lr_scheduler.StepLR(optimizer,args.lr_step,gamma=args.lr_gamma)
+    if args.lr_schedule=='cosine':
+        warmup=max(args.warmup_epochs,0)
+        def factor(step_index,epochs=args.epochs,warmup=warmup):
+            epoch=step_index+1
+            if warmup and epoch<=warmup:
+                return epoch/warmup
+            progress=min((epoch-warmup)/max(epochs-warmup,1),1.)
+            return .5*(1.+math.cos(math.pi*progress))
+        scheduler=torch.optim.lr_scheduler.LambdaLR(optimizer,factor)
+    else:
+        scheduler=torch.optim.lr_scheduler.StepLR(optimizer,args.lr_step,gamma=args.lr_gamma)
     best=float('inf');stale=0;history=[];run_started=time.perf_counter()
     for epoch in range(1,args.epochs+1):
         model.train();started=time.perf_counter()

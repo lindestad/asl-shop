@@ -112,3 +112,30 @@ pass. Update "Current best" in place when a run beats it.
   harvest time. Harvest in a later iteration; evaluate test (`--evaluate-only`)
   only if validation beats the current best 12.90%.
 - Verdict: pending.
+
+### 2026-10-20 — cosine LR schedule + 150 epochs for the 8.8M gaps transformer, 12k slice (launched; in progress at harvest time)
+
+- Idea: the current best (12k gaps, val CER 12.90%) had only one LR drop
+  (step at 80) and its validation curve was still improving at epoch 100
+  (0.1358@81 → 0.1306@91 → 0.1314@100), so the schedule looks under-annealed
+  and too short. Test a smoother recipe: 5-epoch linear warmup + cosine to
+  zero over 150 epochs, same architecture and data as the best.
+- Code: added `--lr-schedule {step,cosine}` and `--warmup-epochs` to
+  `scripts/train_openfs_recognizer.py` (defaults keep the old step behaviour,
+  so the two in-flight runs are unaffected).
+- Config: `scripts/train_openfs_recognizer.py --input-representation gaps
+  --train-slice 12000 --epochs 150 --lr-schedule cosine --warmup-epochs 5`,
+  default architecture (8,828,348 params, same as best), Adam 1e-4,
+  fp16 AMP (V100), seed 42.
+- Batch 8 (not 16): `scripts/gpu_budget.sh 6144` failed again at launch
+  (4,795 MiB free), so per rule 2 the batch was halved; caveat vs the
+  batch-16 best — 2x steps/epoch at unchanged lr. Validation batch 16
+  (greedy per-sequence output unchanged).
+- VRAM: smoke run peaked at 288 MiB (batch 4); free fell 4,795 → 3,629 MiB
+  after launch, i.e. ~1.2 GiB for this run, inside budget. Wall clock
+  ~76 s train + ~70 s validation = ~2.4 min/epoch, ETA ~6 h for 150 epochs.
+- Status: launched detached (`data/logs/openfs-recognizer-gaps-12k-cosine.log`,
+  `data/logs/openfs-recognizer-gaps-12k-cosine.pid`, PID 421615), epoch 2/150
+  at harvest time. Harvest in a later iteration; evaluate test
+  (`--evaluate-only`) only if validation beats the current best 12.90%.
+- Verdict: pending.
