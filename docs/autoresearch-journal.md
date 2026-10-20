@@ -297,3 +297,44 @@ pass. Update "Current best" in place when a run beats it.
 - Verdict: positive; beam 8 is a free, training-free improvement on the current
   best checkpoint. Next: keep harvesting the full-data run, and consider wider
   beams or length-normalised scoring as a follow-up experiment.
+
+### 2026-10-20 — harvested epoch-54 full-data checkpoint with beam 8: validation improved but test CER did not (6.37% CER / 57.10% exact); best unchanged
+
+- Idea: no VRAM headroom for new training (needed 6,144 MiB, free 5,333 MiB), so
+  continue harvesting the still-running full-data gaps run: its validation-best
+  checkpoint had advanced to epoch 54 (training-time greedy validation **7.05%
+  CER / 52.13% exact**, beating epoch 32's 7.81% / 49.32%). Per the decoder caveat,
+  re-gate with beam 8 before letting any test number count.
+- Snapshot: copied `recognizer.pt` to `recognizer-epoch54.pt` before evaluation so
+  the still-running run could not swap the checkpoint mid-harvest.
+- Gate: beam-8 validation **6.79% CER / 52.78% exact**
+  (`data/models/openfs-recognizer-gaps-full/validation-beam8-epoch54.beam-eval-report.json`),
+  beating the epoch-32 beam-8 validation (7.44% / 50.07%) by 0.65 pp CER and
+  2.71 pp exact, so test evaluation was earned.
+- Test (earned, stated explicitly): **6.37% CER / 57.10% exact**
+  (`data/models/openfs-recognizer-gaps-full/test-beam8-epoch54.beam-eval-report.json`) -
+  exact improved 0.20 pp over the 56.90% best but CER regressed 0.05 pp vs the
+  6.32% best, so the current best is **not** updated; epoch-32 checkpoint + beam 8
+  remains best at 6.32% CER / 56.90% exact.
+- Finding: validation gains from later checkpoints no longer transfer to test CER -
+  a 0.65 pp validation gain flipped to -0.05 pp on test CER while test exact still
+  rose. Validation-best tracking on the fixed split is plateauing at noise level;
+  harvesting further checkpoints on validation gains alone is unlikely to pay.
+- Cost: beam-8 validation 3,683 s at 457 MiB peak VRAM; beam-8 test 1,075 s at
+  388 MiB; 32-clip smoke 13.5 s at 292 MiB. All `nice -n 19`, coexisting with the
+  full-data training run on the shared 32 GB GPU. No new scripts or checkpoints
+  committed.
+- Closed out prior-iteration 12k schedule runs: cosine-12k
+  (`data/models/openfs-recognizer-gaps-12k-cosine/recognizer.report.json`)
+  completed 150 epochs, best validation **13.13%** (epoch 105; 827 MiB peak) -
+  worse than the step-schedule 12k 12.90%, cosine-only is a negative result;
+  cosine-EMA-12k (`data/models/openfs-recognizer-gaps-12k-cosine-ema/recognizer.report.json`)
+  completed 150 epochs, best validation **12.35%** (epoch 58; 861 MiB peak) - best
+  12k run so far, still far behind full-data. Neither earned a test pass.
+- In progress at harvest time: full-data run (PID 408476) reached ~epoch 68/100;
+  epoch 66 set a new greedy validation best **6.89% CER / 53.21% exact** and is now
+  the live `recognizer.pt`. Next: once the run plateaus or finishes, harvest and
+  beam-8 re-gate the latest validation-best checkpoint (epoch 66 or later) once
+  more, expecting no material test change.
+- Verdict: mixed/negative on the primary metric; honest test report kept the
+  epoch-32 + beam-8 result as current best.
