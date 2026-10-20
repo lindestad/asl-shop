@@ -688,6 +688,26 @@ class StudyPipeline(unittest.TestCase):
             self.assertEqual(block['test']['clips'], 3)
             self.assertGreaterEqual(block['test']['cer'], 0.0)
 
+    def test_validation_gate_skips_the_test_split_when_validation_cer_does_not_beat_threshold(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            pack = write_pack(directory / 'pack', splits=(('train', 2, 30), ('validation', 2, 30),
+                                                          ('test', 2, 30)))
+            self.run_main(['--data', str(pack), '--refined-labels', str(directory / 'none'),
+                           '--no-distill', '--device', 'cpu', '--epochs', '1', '--patience', '1',
+                           '--hidden', '16', '--receptive-frames', '41', '--batch-size', '4',
+                           '--test-if-validation-cer-below', '0',
+                           '--output', str(directory / 'student.pt'),
+                           '--report', str(directory / 'report.json')])
+            report = json.loads((directory / 'report.json').read_text(encoding='utf-8'))
+            block, = report['configs']
+            self.assertTrue(block['test']['skipped'])
+            self.assertEqual(block['test']['split'], 'test')
+            self.assertEqual(block['test']['threshold'], 0.0)
+            self.assertEqual(block['test']['clips_evaluated'], 0)
+            self.assertIn('reason', block['test'])
+            self.assertNotIn('examples', block['test'])
+
     def test_distillation_without_a_teacher_or_ablation_is_refused(self):
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)

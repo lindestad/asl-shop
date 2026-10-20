@@ -333,6 +333,7 @@ def main():
     p.add_argument('--seed',type=int,default=42)
     p.add_argument('--device',default='cuda')
     p.add_argument('--limit-clips',type=int)
+    p.add_argument('--train-slice',type=int,help='use the first N clips of the train split; for fixed standard slices')
     p.add_argument('--validation-limit',type=int)
     p.add_argument('--evaluate-initial',action='store_true',help='evaluate the untrained model first')
     p.add_argument('--resume',type=Path)
@@ -365,6 +366,10 @@ def main():
     if any(a&b for i,a in enumerate(sets) for b in sets[i+1:]):
         raise ValueError('Signer leakage in dataset metadata.')
     train,validation=read_data(args.data,'train'),read_data(args.data,'validation')
+    if args.train_slice and args.limit_clips:
+        raise ValueError('--train-slice and --limit-clips cannot be combined; use one clip-capping mode.')
+    if args.train_slice and args.train_slice < len(train['clips']):
+        train=dict(train,clips=train['clips'][:args.train_slice])
     model=Recognizer(input_dim=args.input_dim,d_model=args.d_model,heads=args.heads,layers=args.layers,
                      feedforward=args.feedforward,dropout=args.dropout).to(args.device)
     if args.resume:
@@ -460,6 +465,7 @@ def main():
                 checkpoint=str(args.output.resolve()) if best<float('inf') else None,
                 best_validation_cer=best,training_seconds=round(time.perf_counter()-run_started,2),
                 epochs=len(history),history=history,baseline=baseline,dataset=schema,
+                train_clips=len(train['clips']),train_slice=args.train_slice,
                 torch=torch.__version__,peak_vram_mib=round(peak/2**20),
                 gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None)
     report_path=args.output.with_suffix('.report.json')

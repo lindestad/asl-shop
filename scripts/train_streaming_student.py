@@ -806,8 +806,17 @@ def student_run(args,data,validation,test_data,frame_label,label_info,posteriors
                 print('Validation early stopping',flush=True)
                 break
         peak=torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
-        model=load_checkpoint(path,'sequence').to(args.device)
-        test=evaluate(model,test_data,args,'test',limit=args.test_limit)
+        gate=args.test_if_validation_cer_below
+        if gate is not None and (best_metrics is None or best_metrics['cer'] is None
+                                 or not best_metrics['cer'] < gate):
+            test=dict(skipped=True,split='test',
+                      reason='best validation CER did not beat --test-if-validation-cer-below',
+                      threshold=gate,best_validation_cer=best_metrics['cer'] if best_metrics else None,
+                      clips=0,clips_evaluated=0,characters=0,errors=0,cer=None,
+                      letter_accuracy=None,exact_sequence_accuracy=None)
+        else:
+            model=load_checkpoint(path,'sequence').to(args.device)
+            test=evaluate(model,test_data,args,'test',limit=args.test_limit)
         trained_seconds=round(sum(row['training_seconds'] for row in history),1)
         blocks.append(dict(config=f'rf{field}',requested_receptive_frames=requested,dilations=list(dilations),
                            hidden=args.hidden,parameters=parameters,
@@ -1008,6 +1017,9 @@ def main():
     parser.add_argument('--limit-clips',type=int)
     parser.add_argument('--validation-limit',type=int)
     parser.add_argument('--test-limit',type=int)
+    parser.add_argument('--test-if-validation-cer-below',type=float,
+                        help='evaluate the test split only if best validation CER, as a fraction, '
+                             'is strictly below this value; e.g. --test-if-validation-cer-below 0.1407')
     parser.add_argument('--patience',type=int,default=6)
     parser.add_argument('--seed',type=int,default=20261019)
     parser.add_argument('--auxiliary-frame-weight',type=float,default=1.0,
