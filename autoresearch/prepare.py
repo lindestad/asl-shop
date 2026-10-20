@@ -74,9 +74,10 @@ def _pack_split(split, metadata):
         plans.append((i, text))
         offsets.append(offsets[-1] + length)
     total = offsets[-1]
-    xyz = np.lib.format.open_memmap(PACKED / f"{split}_xyz.npy", mode="w+", dtype=np.float32, shape=(total, 2, 21, 3))
-    present = np.lib.format.open_memmap(PACKED / f"{split}_present.npy", mode="w+", dtype=np.bool_, shape=(total, 2))
-    present[:] = False
+    # Built in RAM and written with plain writes: memmap writes on the CephFS home were silently lost
+    # (zeroed frames appeared once the page cache was evicted).
+    xyz = np.zeros((total, 2, 21, 3), dtype=np.float32)
+    present = np.zeros((total, 2), dtype=np.bool_)
     clips = []
     for k, (i, text) in enumerate(plans):
         start = offsets[k]
@@ -92,7 +93,10 @@ def _pack_split(split, metadata):
         row = metadata[str(names[i])]
         clips.append(dict(name=str(names[i]), text=text, signer=row["signerId"],
                           session=row["fullVideoFilename"], start=start, end=offsets[k + 1]))
-    xyz.flush(); present.flush()
+    for name, array in (("xyz", xyz), ("present", present)):
+        with open(PACKED / f"{split}_{name}.npy", "wb") as f:
+            np.save(f, array)
+            f.flush(); os.fsync(f.fileno())
     (PACKED / f"{split}_clips.json").write_text(json.dumps(clips), encoding="utf-8")
     info = dict(split=split, clips=len(clips), frames=total, signers=len({c["signer"] for c in clips}),
                 skipped=skipped, seconds=round(time.perf_counter() - started, 1))
