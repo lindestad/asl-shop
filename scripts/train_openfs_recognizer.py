@@ -284,6 +284,38 @@ def evaluate(model,data,args,split):
     return metrics
 
 
+class Ema:
+    """Exponential moving average of the trainable weights: the shadow copy is what gets
+    evaluated and checkpointed while --ema-decay is set.  The decay ramps up from 0.1 so the
+    shadow does not lag badly over the first hundred steps; live weights are swapped out
+    around each validation pass and restored before the next epoch."""
+
+    def __init__(self,model,decay):
+        self.decay,self.step_index,self.live=decay,0,{}
+        self.shadow={name:p.detach().clone() for name,p in model.named_parameters() if p.requires_grad}
+
+    @torch.no_grad()
+    def update(self,model):
+        self.step_index+=1
+        factor=min(self.decay,(1.+self.step_index)/(10.+self.step_index))
+        for name,p in model.named_parameters():
+            if name in self.shadow:
+                self.shadow[name].mul_(factor).add_(p.detach(),alpha=1.-factor)
+
+    @torch.no_grad()
+    def swap_in(self,model):
+        self.live={name:p.detach().clone().cpu() for name,p in model.named_parameters()}
+        for name,p in model.named_parameters():
+            if name in self.shadow:
+                p.copy_(self.shadow[name])
+
+    @torch.no_grad()
+    def restore(self,model):
+        for name,p in model.named_parameters():
+            if name in self.live:
+                p.copy_(self.live[name].to(p.device))
+
+
 def checkpoint(model,args,metrics,epoch):
     args.output.parent.mkdir(parents=True,exist_ok=True)
     payload=dict(contract=CONTRACT,task='recognizer',labels=VOCAB,
@@ -320,6 +352,9 @@ def main():
     p.add_argument('--lr-gamma',type=float,default=.1)
     p.add_argument('--lr-schedule',choices=['step','cosine'],default='step')
     p.add_argument('--warmup-epochs',type=int,default=0)
+    p.add_argument('--ema-decay',dest='ema_decay',type=float,
+                   help='keep an exponential moving average of the weights (e.g. 0.9995 at ~1.5k '
+                        'steps/epoch); the shadow copy is what gets validated and checkpointed')
     p.add_argument('--ce-weight',type=float,default=1.)
     p.add_argument('--entropy-weight',type=float,default=.8)
     p.add_argument('--monotonicity-weight',type=float,default=1.)
@@ -381,7 +416,7 @@ def main():
         model.load_state_dict(payload['state_dict'],strict=True)
     parameters=sum(q.numel() for q in model.parameters())
     print(json.dumps(dict(task='recognizer',representation=args.input_representation,parameters=parameters,
-                          torch=torch.__version__,device=args.device,amp=args.amp,
+                          torch=torch.__version__,device=args.device,amp=args.amp,ema_decay=args.ema_decay,
                           gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None,
                           training=len(train['clips']),validation=len(validation['clips']))),flush=True)
     if args.evaluate_only:
@@ -416,6 +451,7 @@ def main():
         scheduler=torch.optim.lr_scheduler.LambdaLR(optimizer,factor)
     else:
         scheduler=torch.optim.lr_scheduler.StepLR(optimizer,args.lr_step,gamma=args.lr_gamma)
+    ema=Ema(model,args.ema_decay) if args.ema_decay else None
     best=float('inf');stale=0;history=[];run_started=time.perf_counter()
     for epoch in range(1,args.epochs+1):
         model.train();started=time.perf_counter()
@@ -450,6 +486,7 @@ def main():
             torch.nn.utils.clip_grad_norm_(model.parameters(),5.)
             scaler.step(optimizer)
             scaler.update()
+            if ema: ema.update(model)
             loss_sum+=loss.item();ce_sum+=ce.item()
             ent_sum+=ent.detach().item() if torch.is_tensor(ent) else 0.
             mono_sum+=mono.detach().item() if torch.is_tensor(mono) else 0.
@@ -457,6 +494,7 @@ def main():
             if steps%20==0:
                 print(json.dumps(dict(epoch=epoch,steps=steps,loss=round(loss_sum/steps,5),
                                       training_seconds=round(time.perf_counter()-started,1))),flush=True)
+        if ema: ema.swap_in(model)
         metrics=evaluate(model,validation,args,'validation')
         row=dict(epoch=epoch,loss=loss_sum/steps,ce=ce_sum/steps,attention_entropy=ent_sum/steps,
                  monotonicity=mono_sum/steps,training_seconds=round(time.perf_counter()-started-metrics['seconds'],2),
@@ -467,6 +505,7 @@ def main():
         if metrics['cer']<best:
             best=metrics['cer'];stale=0;checkpoint(model,args,metrics,epoch)
         else: stale+=1
+        if ema: ema.restore(model)
         args.output.parent.mkdir(parents=True,exist_ok=True)
         args.output.with_suffix('.history.json').write_text(json.dumps(history,indent=2),encoding='utf-8')
         scheduler.step()
@@ -474,6 +513,7 @@ def main():
             print('Validation early stopping',flush=True);break
     peak=torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
     report=dict(task='recognizer',representation=args.input_representation,parameters=parameters,amp=args.amp,
+                ema_decay=args.ema_decay,
                 checkpoint=str(args.output.resolve()) if best<float('inf') else None,
                 best_validation_cer=best,training_seconds=round(time.perf_counter()-run_started,2),
                 epochs=len(history),history=history,baseline=baseline,dataset=schema,
