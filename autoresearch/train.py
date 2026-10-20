@@ -40,12 +40,15 @@ def frame_features(xyz, present):
     shape = rel / size[..., None]
     shape = shape * torch.tensor([[1.0, 1.0], [-1.0, 1.0]], device=xyz.device)[:, None, :]  # mirror Left x
     shape = shape.flatten(-2).clamp(-4, 4)                                      # (B,T,2,42)
+    # MediaPipe z is in image-width units; ~2000 px wide FSboard frames (app: real width)
+    zrel = (xyz[..., 2] - xyz[..., :1, 2]) * 2000.0 / size
+    zrel = zrel.clamp(-4, 4)
     pos = wrist / size
     prev_pos = torch.cat([pos[:, :1], pos[:, :-1]], 1)
     prev_present = torch.cat([present[:, :1], present[:, :-1]], 1)
     vel = (pos - prev_pos) * (present & prev_present)[..., None]
     m = present[..., None].float()
-    feats = torch.cat([shape, pos.clamp(-32, 32) * 0.1, vel.clamp(-4, 4), torch.ones_like(m)], -1) * m
+    feats = torch.cat([shape, zrel, pos.clamp(-32, 32) * 0.1, vel.clamp(-4, 4), torch.ones_like(m)], -1) * m
     return feats
 
 
@@ -71,7 +74,7 @@ class CausalBlock(nn.Module):
 class Recognizer(nn.Module):
     def __init__(self):
         super().__init__()
-        n_in = 42 + 2 + 2 + 1
+        n_in = 42 + 21 + 2 + 2 + 1
         self.hand = nn.Sequential(nn.Linear(n_in, HIDDEN), nn.LayerNorm(HIDDEN), nn.GELU(), nn.Linear(HIDDEN, HIDDEN))
         self.slot = nn.Parameter(torch.zeros(2, HIDDEN))
         self.blocks = nn.ModuleList(CausalBlock(HIDDEN, KERNEL, d) for d in DILATIONS)
