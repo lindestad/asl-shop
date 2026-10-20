@@ -89,3 +89,26 @@ pass. Update "Current best" in place when a run beats it.
   iterations; evaluate test (`--evaluate-only`) only if validation beats the
   current best 12.90%.
 - Verdict: pending.
+
+### 2026-10-20 — shrink the gaps transformer: ~835k-param variant, 12k slice (launched; in progress at harvest time)
+
+- Idea: previous iteration's next-idea (b). The 11.50% test CER best uses
+  8.8M params vs the causal TCN's 835k; probe the param-efficiency frontier
+  by shrinking the transformer to TCN scale.
+- Config: offline Transformer recogniser (`scripts/train_openfs_recognizer.py`),
+  `--input-representation gaps`, `--train-slice 12000`, `--d-model 96 --heads 6
+  --layers 3 --feedforward 384`, 100 epochs, Adam 1e-4 with lr step at 80,
+  fp16 AMP (V100), seed 42 (default).
+- Params: 827,996 — essentially matched to the 835,453-param TCN baseline.
+- Batch 8 (not 16): `scripts/gpu_budget.sh 6144` failed at launch (5,479 MiB
+  free vs 6,144), so per rule 2 the batch was halved; caveat vs the batch-16
+  best run — 2x steps/epoch at unchanged lr. Validation batch 16 (greedy
+  per-sequence output unchanged).
+- VRAM: ~680 MiB training (free fell 5,479 → 4,799 MiB with the full-data run
+  also active). Wall clock ~67 s train + ~60 s validation = ~2.1 min/epoch,
+  ETA ~3.5 h for 100 epochs.
+- Status: launched detached (`data/logs/openfs-recognizer-gaps-slim-12k.log`,
+  `data/logs/openfs-recognizer-gaps-slim-12k.pid`, PID 414126), epoch 3/100 at
+  harvest time. Harvest in a later iteration; evaluate test (`--evaluate-only`)
+  only if validation beats the current best 12.90%.
+- Verdict: pending.
