@@ -7,8 +7,12 @@ pass. Update "Current best" in place when a run beats it.
 ## Current best
 
 - offline transformer, gap-preserving timeline representation, 8,828,348 params
-  (train-slice 12,000, batch 16, 100 epochs): **11.50% CER**, 35.07% exact
-  (12,521 test strings, 20 Oct 2026,
+  (full 126,131-clip train slice, batch 16; epoch-11 checkpoint of a 100-epoch run
+  still training, selected on validation): **10.53% CER**, 42.48% exact (12,521
+  test strings, 20 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full/test-eval-epoch11.eval-report.json`)
+- previous: offline transformer gaps, train-slice 12,000, batch 16, 100 epochs,
+  same 8,828,348 params: 11.50% CER, 35.07% exact (20 Oct 2026,
   `data/models/openfs-recognizer-gaps-12k/test-eval.eval-report.json`)
 - previous: causal TCN, 835,453 params: 13.54% CER, 18.11% exact (12,521 test
   strings, 12 Oct 2026, `docs/training-results-2026-10-12.md`)
@@ -170,3 +174,29 @@ pass. Update "Current best" in place when a run beats it.
   in a later iteration; evaluate test (`--evaluate-only`) only if validation
   beats the current best 12.90%.
 - Verdict: pending.
+
+### 2026-10-20 — harvest the full-data gaps transformer at epoch 11: new best 10.53% CER, 42.48% exact
+
+- Idea: no new training job was safe because only 2,015 MiB was free and
+  `scripts/gpu_budget.sh 6144` failed while four training jobs were active.
+  Instead, harvest the already-running full-data gaps transformer if it had
+  crossed the validation gate.
+- Gate: epoch 10 validation was 11.27% CER / 35.93% exact and epoch 11 was
+  11.00% CER / 37.49% exact, both better than the prior 12.90% validation best,
+  so test evaluation was permitted.
+- Evaluation: loaded the saved validation-best checkpoint with
+  `scripts/train_openfs_recognizer.py --evaluate-only --evaluate-splits test`.
+  Epoch 10 test: 10.83% CER / 39.96% exact
+  (`data/models/openfs-recognizer-gaps-full/test-eval-epoch10.eval-report.json`).
+  Epoch 11 test: **10.53% CER / 42.48% exact**
+  (`data/models/openfs-recognizer-gaps-full/test-eval-epoch11.eval-report.json`).
+- Cost: evaluation used 416 MiB peak VRAM and 94 s; no checkpoint was written and
+  the training run was left in place.
+- Caveat: this is an intermediate checkpoint from a still-running 100-epoch full
+  experiment, not a completed experiment. Current best is updated to the epoch-11
+  checkpoint because it beat the prior test best on the fixed FSboard test split.
+- Other active runs: full-data epoch 11 saved / epoch 12 in progress; slim-12k
+  epoch 32 at 24.47% CER / 10.44% exact; cosine-12k epoch 24 at 17.03% CER /
+  19.52% exact; cosine-EMA epoch 8 at 31.70% CER / 6.70% exact.
+- Verdict: positive for the full-data gaps direction; continue the active runs and
+  do not launch more training until VRAM frees up.
