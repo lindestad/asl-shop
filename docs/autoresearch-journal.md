@@ -226,3 +226,37 @@ pass. Update "Current best" in place when a run beats it.
   beat the previous fixed FSboard test result.
 - Verdict: positive; harvest future full-data test evaluations only when the
   validation-best checkpoint advances.
+
+### 2026-10-20 — harvested epoch 32 full-data gaps checkpoint: new best 7.62% CER, 53.30% exact; slim-12k transformer is a negative result
+
+- Idea: with no VRAM headroom for new training, harvest the latest validation-best
+  checkpoint from the still-running full-data gaps transformer, and record the
+  completed slim-12k parameter-efficiency experiment.
+- Gate: `recognizer.pt` now corresponds to epoch 32: validation CER **7.81%** and
+  exact **49.32%**, beating the epoch-19 validation-best (8.57% / 44.44%). Epochs
+  33-37 did not beat epoch 32, so the checkpoint was valid and test evaluation was
+  permitted.
+- Evaluation: ran a 32-clip validation smoke, then greedy `--evaluate-only` on the
+  full `test` split using `--batch-size 4` and `nice -n 19` to coexist with active
+  training.
+- Test: **7.62% CER / 53.30% exact**
+  (`data/models/openfs-recognizer-gaps-full/test-eval-epoch32.eval-report.json`),
+  beating the epoch-19 best by 0.42 pp CER and 4.68 pp exact.
+- Cost: evaluation used 70 MiB peak VRAM and 449 s; no checkpoint was written and
+  the training run was left in place.
+- Slim transformer (`openfs-recognizer-gaps-slim-12k`,
+  `data/models/openfs-recognizer-gaps-slim-12k/recognizer.report.json`): completed
+  100 epochs on the 12,000-clip slice with **827,996 parameters** (10.7x smaller
+  than the full model, 267 MiB peak VRAM) but reached only **14.47% validation
+  CER**, worse than both the 12.90% standard-transformer gate and the 14.07% TCN
+  baseline at similar scale. Verdict: negative - at ~0.8M parameters the
+  gap-preserving transformer is not better than the TCN; no test evaluation earned.
+- Other active runs: full-data epoch 40 in progress (validation best still epoch
+  32); cosine-12k epoch 113, validation best 13.13% at epoch 105; cosine-EMA
+  epoch 97, validation best **12.35%** at epoch 58 - now the best 12k run, slightly
+  ahead of the plain 12k run's 12.90%, but far from the full-data best.
+- Caveat: this remains an intermediate checkpoint from a still-running 100-epoch
+  full experiment. Current best is updated to the epoch-32 checkpoint because it
+  beat the previous fixed FSboard test result.
+- Verdict: positive for the full-data gaps direction; the cosine-EMA schedule is
+  worth a full-data replication once training capacity frees up.
