@@ -65,3 +65,27 @@ pass. Update "Current best" in place when a run beats it.
   plausible, ~50 h wall clock at this batch); (b) shrink the transformer
   (narrower d-model / fewer layers) to probe the param-efficiency frontier
   against the 835k TCN.
+
+### 2026-10-20 — full 126k train slice, gaps transformer, paper schedule (launched; in progress at harvest time)
+
+- Idea: next-idea (a). The 2026-10-19 full-data `gaps` run scored 6.50 test CER
+  but at batch 64 / 7.6 GB peak, over the 6 GiB budget, so it doesn't count in
+  this loop. Same gaps transformer, same paper schedule, full 126,131-clip
+  train slice, batch 16 to fit the budget.
+- The ~50 h estimate was ~5x too high: measured 424-435 clips/s at batch 16
+  (single-process augmentation ceiling), so an epoch is 358 s training + 62 s
+  validation = ~420 s, and 100 epochs ~11.7 h, consistent with the pre-loop
+  11 h at batch 64. Launched as a multi-iteration run (iter-003/iter-005
+  precedent).
+- Config: `scripts/train_openfs_recognizer.py --input-representation gaps`, no
+  `--train-slice` (full train), batch 16, validation batch 16 (halves
+  validation decode; greedy per-sequence output unchanged), 100 epochs, Adam
+  1e-4 with lr step at 80, fp16 AMP (V100).
+- VRAM: 2,268 MiB training so far, inside the 6 GiB budget (6,059 MiB free at
+  launch).
+- Status: launched detached (`data/logs/openfs-recognizer-gaps-full.log`,
+  `data/logs/openfs-recognizer-gaps-full.pid`, PID 408476), epoch 2/100 at
+  harvest time, epoch 1 validation CER 33.38% (warmup). Harvest in later
+  iterations; evaluate test (`--evaluate-only`) only if validation beats the
+  current best 12.90%.
+- Verdict: pending.
