@@ -391,4 +391,34 @@ pass. Update "Current best" in place when a run beats it.
   6.32% CER.
 - Status at launch: beam-16 validation still running (PID 666751, ~1 h in);
   full-data step run at ~epoch 72/100, validation-best still epoch 66.
+
+### 2026-10-20 — harvested beam-16 validation on the frozen epoch-54 snapshot: decoder saturated at width 8 (6.80% vs 6.79% CER); no test pass, best unchanged
+
+- Idea: complete the pending single-variable decoder experiment from two
+  iterations ago - beam 16 vs beam 8 on the frozen `recognizer-epoch54.pt`,
+  gate: test only if beam-16 validation beats the beam-8 validation 6.79% CER
+  on the same checkpoint.
+- Architecture: unchanged 8,828,348-param gaps transformer; decoder-only change
+  (sum log-prob scoring, no length normalisation, no dictionary/language
+  correction).
+- Result (validation, 12,015 clips / 212,030 chars): beam 16 **6.80% CER /
+  52.78% exact** (14,428 errors, 6,342 exact) vs beam 8 **6.79% CER / 52.78%
+  exact** (14,416 errors, 6,342 exact) - identical exact count, 12 more char
+  errors. Gate not earned; no test run; current best unchanged at 6.32% CER /
+  56.90% exact.
+  `data/models/openfs-recognizer-gaps-full/validation-beam16-epoch54.beam-eval-report.json`
+- Finding: beam width saturates at 8 for this checkpoint under unnormalized
+  sum-log-prob scoring - the posterior is already confidently unimodal, extra
+  width cannot find a better hypothesis and marginally helps hypotheses that
+  end past EOS-length. Remaining untested decoder lever: length-normalized
+  scoring; if that fails too, decoder-side gains are exhausted and further
+  progress needs better checkpoints.
+- Cost: 2,409 s, peak 3,347 MiB at batch 32 (vs 457 MiB at beam 8 / batch 8 -
+  the beam-16 per-token `torch.unique`/topk buffers scale with batch x beam);
+  coexisted with both training jobs on the shared GPU.
+- In progress at harvest time: full-data step run (PID 408476) epoch 75/100,
+  greedy validation-best still epoch 66 (6.89% / 53.21%); lr step lands at
+  epoch 80, post-step checkpoints are the automatic harvest target. Full-data
+  cosine+EMA run (PID 670605) epoch 3/150 (~535 s/epoch, ETA ~33 h+).
+- Verdict: negative; retire wider-beam search as a lever.
 - Verdict: pending; run in progress.
