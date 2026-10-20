@@ -422,3 +422,31 @@ pass. Update "Current best" in place when a run beats it.
   cosine+EMA run (PID 670605) epoch 3/150 (~535 s/epoch, ETA ~33 h+).
 - Verdict: negative; retire wider-beam search as a lever.
 - Verdict: pending; run in progress.
+
+### 2026-10-20 — length-normalized beam scoring (alpha=1.0) on frozen epoch-54: 6.98% vs 6.79% CER, worse; gate not earned, no test, best unchanged
+
+- Idea: last untested decoder lever named by the beam-16 entry - divide the
+  beam-search score by generated_length**alpha via new `--length-penalty`
+  (default 0). Smoke check: penalty 0 on the 32-clip validation sample
+  reproduces the saved baseline byte-identical (0.0983103 CER / 13 exact).
+- Architecture: unchanged 8,828,348-param gaps transformer; decoder-only change.
+- Result (validation, 12,015 clips / 212,030 chars, beam 8, batch 8):
+  alpha=1.0 **6.98% CER** (14,794 errors) / **52.81% exact** (6,345) vs
+  unnormalized beam 8 **6.79% CER** (14,416 errors) / **52.78% exact** (6,342).
+  CER is primary and degraded; gate not earned; no test run; current best
+  unchanged at 6.32% CER / 56.90% exact.
+  `data/models/openfs-recognizer-gaps-full/validation-beam8-epoch54-penalty1.beam-eval-report.json`
+- Finding: full length normalization hurts - the model's short-EOS bias was not
+  the failure mode, and the penalty instead promotes low-confidence long
+  continuations; alpha=0.5 would only interpolate between two known operating
+  points. Decoder levers now exhausted (beam width saturates at 8, length
+  penalty degrades); further progress needs better checkpoints.
+- Cost: 6,770 s, peak 457 MiB at batch 8, coexisted with both training jobs.
+- Status at harvest: post-lr-step the full-data step run (PID 408476) jumped -
+  greedy validation-best now epoch 84 at **6.23% CER / 57.36% exact** (epoch 88
+  at 6.44%), far past the old epoch-66 best; live `recognizer.pt` held epoch-84
+  weights, snapshotted to `recognizer-epoch84.pt`. Cosine+EMA run (PID 670605)
+  at epoch ~19/150.
+- Next iteration: beam-8 validation re-gate on epoch-84 vs 6.79% on epoch-54;
+  test only if validation beats it, new best only if test beats 6.32% CER.
+- Verdict: negative; retire length-normalized beam scoring.

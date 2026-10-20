@@ -1,7 +1,8 @@
 """Beam-search decode of a trained offline OpenFS recogniser: same contract, weights and
 Levenshtein harness as evaluate() in train_openfs_recognizer, only the AR inference changes
-(batched beam search, sum of log-probabilities, no length normalisation, no dictionary or
-language correction).  Hypotheses retire on EOS and duplicate prefixes keep their best score.
+(batched beam search, sum of log-probabilities optionally divided by generated-length**alpha
+via --length-penalty, 0 = plain sum, no dictionary or language correction).  Hypotheses retire
+on EOS and duplicate prefixes keep their best score.
 
   python scripts/beam_eval_openfs_recognizer.py --checkpoint <recognizer.pt> --data data/openfs-packed \
       --splits validation --beam-size 8 --output <stem>   # writes <stem>.beam-eval-report.json
@@ -29,7 +30,7 @@ from scripts.train_openfs_recognizer import batches,read_data,summarize
 
 
 @torch.inference_mode()
-def beam_decode(model,poses,segments,positions,beam_size,max_chars):
+def beam_decode(model,poses,segments,positions,beam_size,max_chars,length_penalty=0.0):
     memory,padding=model.encode(poses,segments,positions)
     device=memory.device
     n=len(poses)
@@ -43,6 +44,7 @@ def beam_decode(model,poses,segments,positions,beam_size,max_chars):
     finished_scores=torch.full((n,),-float('inf'),device=device)
     completed_prefixes=torch.full((n,max_chars+1),PAD_CHAR,dtype=torch.long,device=device)
     completed_lengths=torch.zeros(n,dtype=torch.long,device=device)
+    finished_norm=torch.full((n,),-float('inf'),device=device) if length_penalty else None
     for _ in range(max_chars):
         length=prefixes.shape[1]
         logits,_=model.decode(memory,padding,prefixes)
@@ -66,12 +68,18 @@ def beam_decode(model,poses,segments,positions,beam_size,max_chars):
         eos_mask=valid&(token.reshape(n,beam_size)==EOS)
         eos_scores=torch.where(eos_mask,cand_scores,torch.full_like(cand_scores,-float('inf')))
         best_eos_scores,best_eos=eos_scores.max(dim=-1)
-        improved=best_eos_scores>finished_scores
+        if length_penalty:
+            cand_norm=best_eos_scores/float(length)**length_penalty
+            improved=cand_norm>finished_norm
+        else:
+            improved=best_eos_scores>finished_scores
         if improved.any():
             rows=improved.nonzero(as_tuple=True)[0]
             completed_prefixes[rows,:length+1]=cand_prefixes[(rows*beam_size+best_eos[rows])]
             completed_lengths[rows]=length+1
             finished_scores[rows]=best_eos_scores[rows]
+            if length_penalty:
+                finished_norm[rows]=cand_norm[rows]
         active_mask=valid&(token.reshape(n,beam_size)!=EOS)
         new_prefixes=torch.full((n*beam_size,length+1),PAD_CHAR,dtype=torch.long,device=device)
         new_scores=torch.full((n,beam_size),-float('inf'),device=device)
@@ -101,29 +109,40 @@ def beam_decode(model,poses,segments,positions,beam_size,max_chars):
     outputs=[]
     prefix_rows=prefixes.tolist()
     for i in range(n):
-        best_score=float(finished_scores[i])
-        best=tuple(completed_prefixes[i,1:int(completed_lengths[i])].tolist()) if int(completed_lengths[i]) else None
+        completed_length=int(completed_lengths[i])
+        if length_penalty:
+            best_score=float(finished_norm[i])
+            if completed_length>1:
+                best_score/=float(completed_length-1)**length_penalty
+        else:
+            best_score=float(finished_scores[i])
+        best=tuple(completed_prefixes[i,1:completed_length].tolist()) if completed_length else None
         active_rows=active[i].tolist()
         score_rows=scores[i].tolist()
         for j,is_active in enumerate(active_rows):
             if not is_active or not math.isfinite(score_rows[j]):
                 continue
-            if score_rows[j]>best_score:
-                best_score=score_rows[j]
-                best=tuple(prefix_rows[i*beam_size+j][1:])
+            prefix=prefix_rows[i*beam_size+j]
+            if length_penalty:
+                candidate_score=score_rows[j]/float(max(len(prefix)-1,1))**length_penalty
+            else:
+                candidate_score=score_rows[j]
+            if candidate_score>best_score:
+                best_score=candidate_score
+                best=tuple(prefix[1:])
         outputs.append(best if best is not None else ())
     return outputs
 
 
 @torch.inference_mode()
-def score(model,data,representation,beam_size,max_chars,batch_size,device,split,limit):
+def score(model,data,representation,beam_size,max_chars,batch_size,device,split,limit,length_penalty=0.0):
     model.eval()
     started=time.perf_counter()
     stats=defaultdict(lambda:dict(errors=0,characters=0,exact=0,clips=0))
     examples=[]
     for batch in batches(data,batch_size,representation,limit=limit):
         poses,segments,positions,_,selected=batch
-        decoded=beam_decode(model,poses.to(device),segments.to(device),positions.to(device),beam_size,max_chars)
+        decoded=beam_decode(model,poses.to(device),segments.to(device),positions.to(device),beam_size,max_chars,length_penalty)
         for i,index in enumerate(selected):
             row=data['clips'][index]
             actual=decode_text(decoded[i])
@@ -135,7 +154,7 @@ def score(model,data,representation,beam_size,max_chars,batch_size,device,split,
                 examples.append(dict(name=row['name'],truth=row['text'],prediction=actual))
     metrics=summarize(stats.pop('overall'))
     metrics.update(split=split,per_signer={k:summarize(v) for k,v in stats.items()},examples=examples,
-                   decoder=f'beam search width {beam_size}; no dictionary or language correction',
+                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; no dictionary or language correction',
                    seconds=round(time.perf_counter()-started,3))
     return metrics
 
@@ -149,6 +168,7 @@ def main():
     p.add_argument('--batch-size',type=int,default=8)
     p.add_argument('--limit',type=int)
     p.add_argument('--max-chars',type=int,help='defaults to the checkpoint max_decode (48)')
+    p.add_argument('--length-penalty',type=float,default=0.0,help='divide log-probability scores by generated-length**alpha when ranking hypotheses of different lengths; 0 reproduces plain sum-of-log-probabilities')
     p.add_argument('--output',type=Path,required=True,help='report stem; never loads or writes a checkpoint')
     p.add_argument('--device',default='cuda')
     args=p.parse_args()
@@ -161,17 +181,17 @@ def main():
     model.load_state_dict(payload['state_dict'],strict=True)
     parameters=sum(q.numel() for q in model.parameters())
     print(json.dumps(dict(task='recognizer',mode='beam-eval',representation=representation,
-                          parameters=parameters,beam_size=args.beam_size,
+                          parameters=parameters,beam_size=args.beam_size,length_penalty=args.length_penalty,
                           torch=torch.__version__,device=args.device,
                           gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None)),flush=True)
     evaluations=[score(model,read_data(args.data,name),representation,args.beam_size,max_chars,
-                       args.batch_size,args.device,name,args.limit) for name in args.splits]
+                       args.batch_size,args.device,name,args.limit,args.length_penalty) for name in args.splits]
     for metrics in evaluations:
         print(json.dumps({key:metrics[key] for key in ('split','cer','letter_accuracy','exact_sequence_accuracy',
                                                         'clips','characters','errors','exact','seconds')}),flush=True)
     peak=torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
     report=dict(task='recognizer',mode='beam-eval',representation=representation,parameters=parameters,
-                beam_size=args.beam_size,max_chars=max_chars,checkpoint=str(args.checkpoint.resolve()),
+                beam_size=args.beam_size,length_penalty=args.length_penalty,max_chars=max_chars,checkpoint=str(args.checkpoint.resolve()),
                 evaluations=evaluations,dataset=json.loads((args.data/'dataset.json').read_text()),
                 torch=torch.__version__,peak_vram_mib=round(peak/2**20),
                 gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None)
