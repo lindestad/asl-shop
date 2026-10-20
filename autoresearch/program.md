@@ -26,7 +26,7 @@ recognizer. Goal: **lowest validation CER** for a model the app can run live.
 - **Data**: only FSboard landmarks + human transcripts. No OpenFS weights, teacher posteriors,
   refined/clean frame labels or synthetic clips (keeps the result shippable).
 - **Test split is not used for decisions.** Score test only for the final chosen checkpoints.
-- Time budget: 15 min of training (`TIME_BUDGET`), plus ~1-2 min startup/eval.
+- Budget: `FRAME_BUDGET` padded training frames in train.py (1.6e9 ≈ 10k steps ≈ 15 min alone on the H100; longer when the GPU is shared with other work). A fixed data budget instead of `TIME_BUDGET` keeps runs comparable when the GPU is shared.
 - Simplicity: as in the original program. Equal CER with less code is a win.
 
 ## Running experiments

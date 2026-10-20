@@ -13,7 +13,7 @@ from torch import nn
 from torch.nn import functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from prepare import TIME_BUDGET, VOCAB, Split, final_report  # noqa: E402
+from prepare import VOCAB, Split, final_report  # noqa: E402
 
 # ---------------------------------------------------------------------------- hyperparameters
 SEED = 42
@@ -22,6 +22,7 @@ KERNEL = 5
 DILATIONS = (1, 2, 4, 8, 1, 2, 4, 8)
 LOOKAHEAD = 9                 # frames of future context (output shift)
 FRAMES_PER_BATCH = 160_000    # padded frames per optimizer step
+FRAME_BUDGET = 1_600_000_000  # padded training frames per run (~10k steps, ~15 min alone on the H100)
 LR = 2e-3
 WEIGHT_DECAY = 0.01
 WARMUP = 0.03                 # fraction of the time budget
@@ -176,7 +177,8 @@ def main():
     step, smooth = 0, None
     while True:
         elapsed = time.perf_counter() - t0
-        progress = elapsed / TIME_BUDGET
+        # Budget is training frames, not wall time, so runs compare fairly when the GPU is shared.
+        progress = step * FRAMES_PER_BATCH / FRAME_BUDGET
         if progress >= 1:
             break
         lr = LR * (progress / WARMUP if progress < WARMUP else 0.5 * (1 + math.cos(math.pi * (progress - WARMUP) / (1 - WARMUP))))
