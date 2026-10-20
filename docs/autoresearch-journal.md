@@ -139,3 +139,34 @@ pass. Update "Current best" in place when a run beats it.
   at harvest time. Harvest in a later iteration; evaluate test
   (`--evaluate-only`) only if validation beats the current best 12.90%.
 - Verdict: pending.
+
+### 2026-10-20 — EMA weight averaging paired with the cosine LR control, 12k slice (launched; in progress at harvest time)
+
+- Idea: weight averaging is a low-risk regularizer that can stabilize CTC
+  transformer training and improve late-epoch validation without changing the
+  architecture or data. Run it against the active cosine-LR control so the
+  only intended experiment delta is EMA.
+- Code: added `--ema-decay` and an `Ema` helper to
+  `scripts/train_openfs_recognizer.py`. EMA updates after each optimizer step,
+  validates with shadow weights via swap-in, saves the swapped-in checkpoint,
+  then restores live training weights. Startup JSON and report include
+  `ema_decay`; fixed a swap/restore aliasing bug by cloning saved live weights
+  (`p.detach().clone().cpu()`). Smoke run confirmed EMA validation/checkpoint
+  path and peaked at 364 MiB with batch 4.
+- Config: `scripts/train_openfs_recognizer.py --input-representation gaps
+  --train-slice 12000 --epochs 150 --lr-schedule cosine --warmup-epochs 5
+  --ema-decay 0.9995`, default architecture (8,828,348 params), Adam 1e-4,
+  fp16 AMP (V100), seed 42.
+- Batch 8 (not 16): `scripts/gpu_budget.sh 6144` failed at launch
+  (3,375 MiB free), so per rule 2 the batch was halved; same caveat as the
+  cosine control vs the batch-16 best — 2x steps/epoch at unchanged lr.
+  Validation batch 16.
+- VRAM: 1,214 MiB observed after launch. Wall clock epoch 1: 82 s train + 86 s
+  validation = ~2.8 min/epoch, ETA ~7 h for 150 epochs.
+- Status: launched detached
+  (`data/logs/openfs-recognizer-gaps-12k-cosine-ema.log`,
+  `data/logs/openfs-recognizer-gaps-12k-cosine-ema.pid`, PID 446261), epoch
+  2/150 at harvest time. Epoch 1 validation: 8.22% CER, 0.00% exact. Harvest
+  in a later iteration; evaluate test (`--evaluate-only`) only if validation
+  beats the current best 12.90%.
+- Verdict: pending.
