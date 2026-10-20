@@ -361,3 +361,34 @@ pass. Update "Current best" in place when a run beats it.
 - Full-data run (PID 408476) at ~epoch 69/100; validation-best still epoch 66
   (greedy 6.89% / 53.21%); lr step lands at epoch 80.
 - Verdict: pending; results land next iteration.
+
+### 2026-10-20 — launched full-data cosine+EMA replication (multi-iteration run)
+
+- Idea: the named follow-up from the 12k schedule screen - cosine-EMA-12k was the
+  best 12k run (12.35% greedy validation, vs 12.90% step-only, cosine-only a
+  negative), and the journal called for a full-data replication "once training
+  capacity opens up". The current best (epoch-32 step-schedule checkpoint) is no
+  longer on disk, so a second independent full-data schedule is also a second
+  lottery ticket for a better checkpoint; the step-schedule run is closing out
+  epoch 100 and its post-epoch-80 harvest is automatic, not an experiment.
+- Architecture: unchanged 8,828,348-param gaps transformer (single variable:
+  schedule = cosine with 5-epoch warmup + EMA weight averaging, vs step decay).
+- Budget: `scripts/gpu_budget.sh 6144` failed (2,655 MiB free; three other GPU jobs
+  running), so per rule 2 the batch was halved to 8. EMA decay scaled from the
+  12k recipe's 0.9995 (1.5k steps/epoch) to 0.9999 at 15,766 steps/epoch, keeping
+  the averaging horizon ~10k steps / ~0.6 epochs. Epochs kept at 150 to replicate
+  the winning 12k recipe.
+- Launched: `scripts/train_openfs_recognizer.py --input-representation gaps
+  --batch-size 8 --validation-batch-size 16 --epochs 150 --lr-schedule cosine
+  --warmup-epochs 5 --ema-decay 0.9999` into
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/` (PID in
+  `data/logs/openfs-recognizer-gaps-full-cosine-ema.pid`, log
+  `data/logs/openfs-recognizer-gaps-full-cosine-ema.log`). Startup 1,218 MiB VRAM,
+  ~20 steps/s -> ~790 s/epoch, ETA ~33 h solo but longer with three jobs sharing
+  the GPU; multi-iteration run, harvest when it plateaus or finishes.
+- Gate: harvest validation-best checkpoint, beam-8 re-gate vs 6.79% on epoch-54
+  validation; test pass only if validation beats it, new best only if test beats
+  6.32% CER.
+- Status at launch: beam-16 validation still running (PID 666751, ~1 h in);
+  full-data step run at ~epoch 72/100, validation-best still epoch 66.
+- Verdict: pending; run in progress.
