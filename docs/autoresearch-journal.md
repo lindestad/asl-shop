@@ -7,9 +7,13 @@ pass. Update "Current best" in place when a run beats it.
 ## Current best
 
 - offline transformer, gap-preserving timeline representation, 8,828,348 params
-  (full 126,131-clip train slice, batch 16; epoch-11 checkpoint of a 100-epoch run
-  still training, selected on validation): **10.53% CER**, 42.48% exact (12,521
-  test strings, 20 Oct 2026,
+  (full 126,131-clip train slice, batch 16; epoch-19 validation-best checkpoint of
+  a 100-epoch run still training): **8.04% CER**, 48.62% exact (12,521 test
+  strings, 20 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full/test-eval-epoch19.eval-report.json`)
+- previous: same architecture/data, epoch-11 validation-best checkpoint of the
+  100-epoch full-data run: 10.53% CER, 42.48% exact (12,521 test strings,
+  20 Oct 2026,
   `data/models/openfs-recognizer-gaps-full/test-eval-epoch11.eval-report.json`)
 - previous: offline transformer gaps, train-slice 12,000, batch 16, 100 epochs,
   same 8,828,348 params: 11.50% CER, 35.07% exact (20 Oct 2026,
@@ -200,3 +204,25 @@ pass. Update "Current best" in place when a run beats it.
   19.52% exact; cosine-EMA epoch 8 at 31.70% CER / 6.70% exact.
 - Verdict: positive for the full-data gaps direction; continue the active runs and
   do not launch more training until VRAM frees up.
+
+### 2026-10-20 — harvested epoch 19 full-data gaps checkpoint: new best 8.04% CER, 48.62% exact
+
+- Idea: with no room for new training, harvest the latest validation-best checkpoint
+  from the already-running full-data gaps transformer.
+- Gate: `recognizer.pt` still corresponded to epoch 19: validation CER **8.57%** and
+  exact **44.44%**. Epochs 20-22 did not beat that validation CER (epoch 20: 9.67%
+  CER; epoch 21: 8.73% CER; epoch 22: 8.94% CER), so the checkpoint was valid and
+  test evaluation was permitted.
+- Evaluation: ran a 32-clip validation smoke, then greedy `--evaluate-only` on the
+  full `test` split using `--batch-size 4` and `nice -n 19` to coexist with active
+  training.
+- Test: **8.04% CER / 48.62% exact**
+  (`data/models/openfs-recognizer-gaps-full/test-eval-epoch19.eval-report.json`),
+  beating the epoch-11 best by 2.49 pp CER and 6.14 pp exact.
+- Cost: evaluation used 70 MiB peak VRAM and 489 s; no checkpoint was written and
+  the training run was left in place.
+- Caveat: this remains an intermediate checkpoint from a still-running 100-epoch
+  full experiment. Current best is updated to the epoch-19 checkpoint because it
+  beat the previous fixed FSboard test result.
+- Verdict: positive; harvest future full-data test evaluations only when the
+  validation-best checkpoint advances.
