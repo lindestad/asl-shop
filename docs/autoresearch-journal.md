@@ -338,3 +338,26 @@ pass. Update "Current best" in place when a run beats it.
   more, expecting no material test change.
 - Verdict: mixed/negative on the primary metric; honest test report kept the
   epoch-32 + beam-8 result as current best.
+
+### 2026-10-20 — launched beam-16 decoder experiment on the frozen epoch-54 snapshot (validation first; multi-iteration run)
+
+- Idea: the epoch-32 best checkpoint is no longer on disk (only epoch-13/19/54
+  snapshots plus the live epoch-66 `recognizer.pt`), so beating 6.32% CER needs
+  either a better checkpoint or a better decoder. The prior journal follow-up named
+  "a wider beam or length-normalized scoring" as the decoder follow-up. Chose one
+  single-variable experiment: beam width 16 vs the completed beam-8 baseline on the
+  frozen epoch-54 snapshot, whose beam-8 numbers are known (validation 6.79% /
+  52.78%, test 6.37% / 57.10%).
+- Architecture: unchanged 8,828,348-param gaps transformer; decoder-only change.
+- Launched: `scripts/beam_eval_openfs_recognizer.py --checkpoint
+  recognizer-epoch54.pt --splits validation --beam-size 16 --batch-size 32`
+  (PID in `data/logs/openfs-recognizer-gaps-full-beam16-val.pid`, log
+  `data/logs/openfs-recognizer-gaps-full-beam16-val.log`); a first attempt at
+  batch-size 8 was killed for exceeding one iteration's wall time (beam-8 full
+  validation took 3,683 s). Free VRAM was 5,293 MiB; the eval added ~1.2 GiB
+  (4,057 MiB free after start), no training involved so no budget halving needed.
+- Gate: test run only if beam-16 validation CER beats beam-8 validation
+  6.79% on the same checkpoint; new best only if test then beats 6.32% CER.
+- Full-data run (PID 408476) at ~epoch 69/100; validation-best still epoch 66
+  (greedy 6.89% / 53.21%); lr step lands at epoch 80.
+- Verdict: pending; results land next iteration.
