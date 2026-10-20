@@ -7,9 +7,16 @@ pass. Update "Current best" in place when a run beats it.
 ## Current best
 
 - offline transformer, gap-preserving timeline representation, 8,828,348 params
-  (full 126,131-clip train slice, batch 16; epoch-19 validation-best checkpoint of
-  a 100-epoch run still training): **8.04% CER**, 48.62% exact (12,521 test
-  strings, 20 Oct 2026,
+  (full 126,131-clip train slice, batch 16; epoch-32 validation-best checkpoint of
+  a 100-epoch run still training, decoded with beam search width 8, no dictionary
+  or language correction): **6.32% CER**, 56.90% exact (12,521 test strings,
+  20 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full/test-beam8.beam-eval-report.json`)
+- previous: same architecture/data/checkpoint, greedy decoding: 7.62% CER,
+  53.30% exact (12,521 test strings, 20 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full/test-eval-epoch32.eval-report.json`)
+- previous: same architecture/data, epoch-19 validation-best checkpoint, greedy
+  decoding: 8.04% CER, 48.62% exact (12,521 test strings, 20 Oct 2026,
   `data/models/openfs-recognizer-gaps-full/test-eval-epoch19.eval-report.json`)
 - previous: same architecture/data, epoch-11 validation-best checkpoint of the
   100-epoch full-data run: 10.53% CER, 42.48% exact (12,521 test strings,
@@ -260,3 +267,33 @@ pass. Update "Current best" in place when a run beats it.
   beat the previous fixed FSboard test result.
 - Verdict: positive for the full-data gaps direction; the cosine-EMA schedule is
   worth a full-data replication once training capacity frees up.
+
+### 2026-10-20 — experiment: beam-search decoding (width 8) of the epoch-32 checkpoint: new best 6.32% CER, 56.90% exact
+
+- Idea: with no VRAM headroom for new training, test whether decoding the current
+  best epoch-32 full-data gaps checkpoint with beam search (instead of greedy)
+  improves recognition. Named experiment: **beam-search decoding only** - same
+  contract, weights and Levenshtein harness; batched beam search over width 8,
+  sum of log-probabilities, no length normalisation, hypotheses retire on EOS;
+  no dictionary and no language/LLM correction.
+- Harness: new `scripts/beam_eval_openfs_recognizer.py` (reads a checkpoint
+  read-only, never writes one). Sanity: its greedy pass (beam size 1) reproduced
+  the checkpoint's recorded validation numbers exactly (7.81% CER / 49.32% exact,
+  16,559 / 212,030 errors), so beam and greedy are directly comparable, and the
+  prior greedy test reports are comparable to this harness.
+- Validation gate: beam 8 gave **7.44% CER / 50.07% exact** vs greedy 7.81% /
+  49.32% (gains of 0.37 pp CER and 0.75 pp exact), so test evaluation was earned.
+- Test: **6.32% CER / 56.90% exact**
+  (`data/models/openfs-recognizer-gaps-full/test-beam8.beam-eval-report.json`),
+  beating the epoch-32 greedy best by 1.30 pp CER and 3.60 pp exact. The gain is
+  larger on test than on validation.
+- Cost: beam-8 validation 4,128 s at 457 MiB peak VRAM; beam-8 test 2,728 s at
+  388 MiB peak; greedy validation baseline 1,379 s. All at `nice -n 19`,
+  coexisting with the three active training runs on the shared 32 GB GPU.
+- Caveat: the current best is now decoder-dependent - beam search is part of the
+  reported 6.32% result. Training-time validation continues to track greedy
+  decoding; a future validation-best checkpoint must be re-gated and re-decoded
+  with beam 8 before its test number counts.
+- Verdict: positive; beam 8 is a free, training-free improvement on the current
+  best checkpoint. Next: keep harvesting the full-data run, and consider wider
+  beams or length-normalised scoring as a follow-up experiment.
