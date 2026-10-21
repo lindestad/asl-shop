@@ -479,3 +479,20 @@ pass. Update "Current best" in place when a run beats it.
   cosine+EMA run (PID 670605) epoch ~19/150. Next gates now reference 6.05%
   validation CER (epoch-84 beam-8) and 5.63% test CER.
 - Verdict: positive; new best recorded.
+
+### 2026-10-21 — launched capacity lever: layers 3->6 (run in progress)
+
+- Idea: decoder levers are exhausted and the best gain came from the checkpoint;
+  next lever is model capacity. Scale the transformer stack 3 -> 6 layers
+  (params ~8.8M -> ~17.6M, estimated from per-layer blocks; d_model 256, heads 8,
+  feedforward 2048 unchanged).
+- Config: identical to the new-best run's recipe - full 126,131-clip train
+  slice, gaps representation, batch 16, 100 epochs, step LR at 80 (gamma 0.1),
+  seed 42 - only `--layers 6` changes. Smoke (`--limit-clips 2000 --epochs 2`):
+  peak 1,139 MiB at batch 8, so batch 16 fits the 6 GiB budget with headroom.
+- Output: `data/models/openfs-recognizer-gaps-full-layers6/recognizer.pt`
+  (PID 787811, launched 21 Oct 2026).
+- Gate: harvest its greedy val-best; beam-8 validation must beat 6.05% CER
+  (epoch-84 beam-8) before a test pass; test must beat 5.63% CER for a new best.
+- Note: cosine+EMA run (PID 670605, epoch ~20/150, greedy 6.76% CER at epoch 19)
+  continues in parallel; its harvest gate is the same 6.05% validation bar.
