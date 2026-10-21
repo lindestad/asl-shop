@@ -8,8 +8,11 @@ pass. Update "Current best" in place when a run beats it.
 
 - offline transformer, gap-preserving timeline representation, 8,828,348 params
   (full 126,131-clip train slice, batch 8, cosine LR with 5-epoch warmup, EMA
-  weights decay 0.9999, 150-epoch run; epoch-35 validation-best checkpoint,
+  weights decay 0.9999, 150-epoch run; epoch-62 validation-best checkpoint,
   decoded with beam search width 8, no dictionary or language correction):
+  **5.04% CER**, 65.47% exact (12,521 test strings, 21 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-epoch62.beam-eval-report.json`)
+- previous: same run, epoch-35 validation-best checkpoint, beam 8:
   **5.45% CER**, 63.01% exact (12,521 test strings, 21 Oct 2026,
   `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-epoch35.beam-eval-report.json`)
 - previous: same architecture/data, batch 16, step LR schedule, epoch-84
@@ -536,3 +539,28 @@ pass. Update "Current best" in place when a run beats it.
 - Finding: cosine+EMA reaches at epoch 35 what the step-schedule recipe needed
   84 epochs for, and then goes further. Next gates reference 5.62% validation
   CER (epoch-35 beam-8) and 5.45% test CER.
+
+### 2026-10-21 — cosine+EMA epoch 62, beam 8: **NEW BEST 5.04% CER / 65.47% exact**
+
+- Idea: harvest trigger from the epoch-27 entry fired - cosine+EMA greedy
+  val-best hit epoch 62 at **5.51% CER / 61.39% exact** (vs epoch-35's 5.85% /
+  60.06%). `scripts/gpu_budget.sh 6144` failed (1,061 MiB free), so no new
+  training; evaluation-only harvest on the frozen `recognizer-epoch62.pt`
+  snapshot (live `recognizer.pt` verified identical, epoch 62).
+- Architecture/decoder: unchanged 8,828,348-param gaps transformer, beam 8
+  unnormalized sum log-prob.
+- Validation (12,015 clips, beam 8): **5.30% CER** (11,231 errors) / **61.66%
+  exact** (7,409) - beats the 5.62% gate; test pass earned.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-epoch62.beam-eval-report.json`
+- Test (12,521 clips, beam 8): **5.04% CER** (11,137 errors) / **65.47% exact**
+  (8,198) - new best on both metrics, previous 5.45% / 63.01%.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-epoch62.beam-eval-report.json`
+- Cost: smoke 11 s / 292 MiB; validation 2,339 s / 457 MiB; test 2,297 s /
+  388 MiB (beam 8, batch 8, nice -n 19, shared GPU).
+- Status at harvest: cosine+EMA run (PID 670605) epoch ~76/150, still
+  improving; layers6 run (PID 787811) epoch ~61/100, greedy val-best epoch 59
+  at 6.69% CER / 54.34% exact - far behind this run's class, so doubling depth
+  looks like the wrong capacity lever even before its lr step at epoch 80.
+- Next gates reference 5.30% validation CER (epoch-62 beam-8) and 5.04% test
+  CER. Next trigger: cosine+EMA greedy val-best <= 5.21% (0.3 pt).
+- Verdict: positive; new best recorded.
