@@ -43,6 +43,7 @@ sequence finishes.
 `replay_runtime.py` feeds validation clips frame by frame through the live runtime as a
 1920x1080 camera would: 4.69% CER on 300 clips vs 4.67% offline on the same clips, 5.4 ms per frame.
 
-Not yet checked here: the Electron UI itself (no Node on the training machine) and a real webcam.
-`build-backend.mjs` still bundles only `data/*.pt`; copy the model to `data/sequence.pt` before
-packaging.
+Checked in the app (2026-10-21): `npm run build`, lint, format, `npm test` (web and Electron) and
+the Python tests pass. `build-backend.mjs` bundles `assets/models/fsboard-stream.pt` into
+`assets/models` of the packed backend, and the packed worker reports method `fsboard-stream`.
+Not yet checked: a real webcam (handedness, mirroring).

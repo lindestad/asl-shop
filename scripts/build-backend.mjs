@@ -11,14 +11,16 @@ const classifier = path.join(root, "data", "knn.pkl");
 const neuralModels = ["handshape.pt", "sequence.pt"]
   .map((name) => path.join(root, "data", name))
   .filter(existsSync);
-if (!existsSync(classifier) && !neuralModels.length)
+const streamModel = path.join(root, "assets", "models", "fsboard-stream.pt");
+const hasNeural = neuralModels.length > 0 || existsSync(streamModel);
+if (!existsSync(classifier) && !hasNeural)
   throw new Error("Run uv run python model/knn.py to train the ASL classifier before packaging.");
 const child = spawn(
   "uv",
   [
     "run",
     "--locked",
-    ...(neuralModels.length ? ["--extra", "neural"] : []),
+    ...(hasNeural ? ["--extra", "neural"] : []),
     "--python",
     "3.12",
     "--with",
@@ -40,7 +42,8 @@ const child = spawn(
     `${model}:data`,
     ...(existsSync(classifier) ? ["--add-data", `${classifier}:data`] : []),
     ...neuralModels.flatMap((filename) => ["--add-data", `${filename}:data`]),
-    ...(neuralModels.length ? ["--collect-all", "torch", "--hidden-import", "model.neural"] : []),
+    ...(existsSync(streamModel) ? ["--add-data", `${streamModel}:assets/models`] : []),
+    ...(hasNeural ? ["--collect-all", "torch", "--hidden-import", "model.neural"] : []),
     "--collect-all",
     "mediapipe",
     "--hidden-import",
