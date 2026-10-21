@@ -603,3 +603,33 @@ pass. Update "Current best" in place when a run beats it.
 - Next gates reference 4.89% validation CER and 4.52% test CER. Next trigger:
   cosine+EMA greedy val-best <= 5.21% -> re-ensemble with step-84.
 - Verdict: positive; new best recorded.
+
+### 2026-10-21 — 4-checkpoint ensemble (e27+e62 + step-54+84): 4.86% val / 4.56% test CER; gate nominally earned but test worse; best unchanged
+
+- Idea: harvest triggers not fired (cosine+EMA greedy val-best still epoch 62 at
+  5.51% through epoch 91/150; layers6 best was 6.69%) and `gpu_budget.sh 6144`
+  failed (1,879 MiB free), so evaluation-only experiment: widen the winning
+  2-checkpoint ensemble to 4 members, two per recipe (cos-EMA epoch-27+62,
+  step epoch-54+84; all 8,828,348-param identical architecture, mean of
+  per-step log-posteriors, beam 8).
+- Validation (12,015 clips, beam 8): **4.86% CER** (10,310 errors) / **63.17%
+  exact** (7,590) - nominally beats the 4.89% gate by 0.03 pp but exact drops
+  0.13 pp; test pass earned.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e27-e62-s54-s84.beam-eval-report.json`
+- Test (12,521 clips, beam 8): **4.56% CER** (10,090 errors) / **66.80% exact**
+  (8,364) - worse than best 4.52% / 66.92% on both metrics; best unchanged.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e27-e62-s54-s84.beam-eval-report.json`
+- Finding: ensemble size saturates at 2 - older/correlated snapshots from the
+  same runs add no diversity; the +0.03 pp validation edge flipped sign on test,
+  consistent with the epoch-54 validation/test flip. Do not re-ensemble stale
+  snapshots; only re-ensemble materially newer val-bests.
+- Cost: smoke 15 s / 505 MiB; validation 4,383 s / 750 MiB; test 4,664 s /
+  648 MiB (batch 8, beam 8, nice -n 19, four model copies, shared GPU).
+- Status at harvest: cosine+EMA (PID 670605) epoch ~91/150, greedy val-best
+  epoch 62 (5.51%). layers6 (PID 787811) jumped after its epoch-80 lr step:
+  greedy val-best epoch 82 at **5.85% CER / 59.4% exact** (best epoch 82/82,
+  6-layer 17.6M-arch, cannot ensemble with 3-layer checkpoints - different
+  architecture check). Next iteration: snapshot layers6 `recognizer.pt`,
+  beam-8 validation gate vs 4.89%; only 3-layer runs feed ensembles.
+- Verdict: negative on the primary metric; retire multi-snapshot ensembling
+  within the same run.
