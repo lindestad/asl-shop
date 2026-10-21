@@ -7,9 +7,13 @@ pass. Update "Current best" in place when a run beats it.
 ## Current best
 
 - offline transformer, gap-preserving timeline representation, 8,828,348 params
-  (full 126,131-clip train slice, batch 16; epoch-32 validation-best checkpoint of
-  a 100-epoch run still training, decoded with beam search width 8, no dictionary
-  or language correction): **6.32% CER**, 56.90% exact (12,521 test strings,
+  (full 126,131-clip train slice, batch 16, step LR schedule; epoch-84
+  validation-best checkpoint of the 100-epoch run, decoded with beam search
+  width 8, no dictionary or language correction): **5.63% CER**, 61.47% exact
+  (12,521 test strings, 21 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full/test-beam8-epoch84.beam-eval-report.json`)
+- previous: same architecture/data, epoch-32 validation-best checkpoint, beam
+  search width 8: **6.32% CER**, 56.90% exact (12,521 test strings,
   20 Oct 2026,
   `data/models/openfs-recognizer-gaps-full/test-beam8.beam-eval-report.json`)
 - previous: same architecture/data/checkpoint, greedy decoding: 7.62% CER,
@@ -450,3 +454,28 @@ pass. Update "Current best" in place when a run beats it.
 - Next iteration: beam-8 validation re-gate on epoch-84 vs 6.79% on epoch-54;
   test only if validation beats it, new best only if test beats 6.32% CER.
 - Verdict: negative; retire length-normalized beam scoring.
+
+### 2026-10-21 — harvested post-lr-step epoch-84 checkpoint, beam 8: NEW BEST 5.63% CER / 61.47% exact
+
+- Idea: the step-schedule run's lr step landed at epoch 80; automatic harvest
+  target from the two prior entries. Snapshotted epoch-84 validation-best
+  weights from the live `recognizer.pt` (greedy validation 6.23% CER / 57.36%
+  exact, vs old epoch-66 best 6.89% / 53.21%). Gate: beam-8 validation on
+  epoch-84 must beat the frozen reference 6.79% CER (epoch-54 beam-8).
+- Architecture: unchanged 8,828,348-param gaps transformer; decoder unchanged
+  (beam 8, unnormalized sum log-prob - length penalty retired previous entry).
+- Validation (12,015 clips): **6.05% CER** (12,818 errors) / **57.72% exact**
+  (6,935) - beats 6.79% gate; test pass earned.
+  `data/models/openfs-recognizer-gaps-full/validation-beam8-epoch84.beam-eval-report.json`
+- Test (12,521 clips): **5.63% CER** (12,448 errors) / **61.47% exact** (7,697)
+  - new best, previous 6.32% / 56.90%.
+  `data/models/openfs-recognizer-gaps-full/test-beam8-epoch84.beam-eval-report.json`
+- Finding: training longer past the lr step is the lever that matters -
+  decoder-side levers (beam width, length penalty) are exhausted while the
+  checkpoint improved ~0.7 points CER from one lr step plus post-step epochs.
+- Cost: validation 5,589 s peak 457 MiB; test 1,518 s peak 388 MiB (batch 8,
+  beam 8, shared GPU).
+- Status at harvest: step run (PID 408476) at epoch 88/100, val-best epoch 84;
+  cosine+EMA run (PID 670605) epoch ~19/150. Next gates now reference 6.05%
+  validation CER (epoch-84 beam-8) and 5.63% test CER.
+- Verdict: positive; new best recorded.
