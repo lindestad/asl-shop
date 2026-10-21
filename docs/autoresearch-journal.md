@@ -6,10 +6,15 @@ pass. Update "Current best" in place when a run beats it.
 
 ## Current best
 
-- offline transformer, gap-preserving timeline representation, 8,828,348 params
-  (full 126,131-clip train slice, batch 8, cosine LR with 5-epoch warmup, EMA
-  weights decay 0.9999, 150-epoch run; epoch-62 validation-best checkpoint,
-  decoded with beam search width 8, no dictionary or language correction):
+- two-checkpoint log-posterior ensemble of the cosine+EMA epoch-62 and step-schedule
+  epoch-84 full-data gaps transformers (8,828,348 params each, 17,656,696 total),
+  beam search width 8, mean of per-step log-posteriors, no dictionary or language
+  correction: **4.52% CER**, 66.92% exact (12,521 test strings, 21 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens-e62-step84.beam-eval-report.json`)
+- previous: cosine+EMA run epoch-62 checkpoint (8,828,348 params, full 126,131-clip
+  train slice, batch 8, cosine LR with 5-epoch warmup, EMA weights decay 0.9999,
+  150-epoch run; epoch-62 validation-best checkpoint, decoded with beam search
+  width 8, no dictionary or language correction):
   **5.04% CER**, 65.47% exact (12,521 test strings, 21 Oct 2026,
   `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-epoch62.beam-eval-report.json`)
 - previous: same run, epoch-35 validation-best checkpoint, beam 8:
@@ -563,4 +568,38 @@ pass. Update "Current best" in place when a run beats it.
   looks like the wrong capacity lever even before its lr step at epoch 80.
 - Next gates reference 5.30% validation CER (epoch-62 beam-8) and 5.04% test
   CER. Next trigger: cosine+EMA greedy val-best <= 5.21% (0.3 pt).
+- Verdict: positive; new best recorded.
+
+### 2026-10-21 — checkpoint ensemble (e62 + step-84), beam 8: **NEW BEST 4.52% CER / 66.92% exact**
+
+- Idea: harvest triggers did not fire (cosine+EMA greedy val-best still epoch 62 at
+  5.51%; layers6 best 6.69% at epoch 59, wrong capacity lever) and
+  `scripts/gpu_budget.sh 6144` failed (1,899 MiB free), so run an evaluation-only
+  experiment. Decoder levers were exhausted at checkpoint level; ensembling is the
+  untested combination lever. Named experiment: **checkpoint ensembling** - equal
+  mean of per-decoding-step log-posteriors of two independently trained full-data
+  gaps transformers (cosine+EMA epoch-62 val-best + step-schedule epoch-84
+  val-best, both 8,828,348 params, identical architecture), beam 8 unchanged, no
+  dictionary/language correction.
+- Code: `--checkpoint` accepts multiple paths in
+  `scripts/beam_eval_openfs_recognizer.py`; single-checkpoint path unchanged.
+  Sanity: ensemble of epoch-62 with itself reproduced the single-model 32-clip
+  smoke byte-identical (0.0660522 CER / 15 exact).
+- Validation (12,015 clips, beam 8): **4.89% CER** (10,373 errors) / **63.30%
+  exact** (7,605) vs epoch-62 alone 5.30% / 61.66% - beats the 5.30% gate; test
+  pass earned.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens-e62-step84.beam-eval-report.json`
+- Test (12,521 clips, beam 8): **4.52% CER** (9,996 errors) / **66.92% exact**
+  (8,379) - new best on both metrics, previous 5.04% / 65.47%.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens-e62-step84.beam-eval-report.json`
+- Cost: validation 2,892 s / 575 MiB peak; test 3,109 s / 492 MiB (batch 8,
+  beam 8, nice -n 19, two model copies resident, shared GPU).
+- Finding: ensembling two recipes' val-best checkpoints gained 0.52 pp test CER
+  from one forward each - the biggest single-step gain since EMA. The lever
+  composes with checkpoint progress: re-ensemble whenever a run's val-best
+  advances materially.
+- Status at harvest: cosine+EMA (PID 670605) epoch ~82/150, greedy val-best epoch
+  62 (5.51%); layers6 (PID 787811) epoch ~67/100, best epoch 59 (6.69%).
+- Next gates reference 4.89% validation CER and 4.52% test CER. Next trigger:
+  cosine+EMA greedy val-best <= 5.21% -> re-ensemble with step-84.
 - Verdict: positive; new best recorded.
