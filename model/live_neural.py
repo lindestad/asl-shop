@@ -12,7 +12,9 @@ class NeuralRuntime:
     def __init__(self, root):
         self.paths = {
             "handshape": Path(os.environ.get("ASL_HANDSHAPE_MODEL", Path(root) / "data" / "handshape.pt")),
-            "sequence": Path(os.environ.get("ASL_SEQUENCE_MODEL", Path(root) / "data" / "sequence.pt")),
+            "sequence": Path(os.environ.get("ASL_SEQUENCE_MODEL", next(
+                (path for path in (Path(root) / "data" / "sequence.pt", Path(root) / "assets" / "models" / "fsboard-stream.pt")
+                 if path.is_file()), Path(root) / "data" / "sequence.pt"))),
         }
         self.models = {}
         self.errors = {}
@@ -50,10 +52,15 @@ class NeuralRuntime:
         self.text = ""
         self.finished = False
         self.limit_reached = False
-        self.method = "causal-tcn"
+        self.method = "fsboard-stream" if self.streaming() else "causal-tcn"
+        self.stream_timeline, self.stream = None, None
         self.refinement_error = None
         self.context_status = "collecting"
         self.context_message = None
+
+    def streaming(self):
+        """The raw-landmark FSboard model (model/stream_net.py) instead of the 91-feature contract."""
+        return getattr(self.models.get("sequence"), "contract", None) == "asl-shop-raw-xyz-v1"
 
     def spelling_context(self):
         captured = np.array(self.frames)
@@ -163,6 +170,12 @@ class NeuralRuntime:
                     self.raw_hands[hand["hand"]].append(np.array([[point.x * width, point.y * height]
                                                                  for point in hand["landmarks"]], dtype=np.float32))
                 self.frames.append(features)
+                if self.streaming():
+                    from model.stream_net import RawTimeline, StreamDecoder, raw_frame
+                    if self.stream is None:
+                        self.stream_timeline, self.stream = RawTimeline(), StreamDecoder(self.models["sequence"])
+                    raw = self.stream_timeline.feed(*raw_frame(usable, width, height), timestamp_ms)
+                    self.stream.push(raw[:max(0, 900 - len(self.model_frames))])
                 self.timestamps.append(timestamp_ms)
                 generated = self.resampler.feed(features, timestamp_ms)
                 capacity = 900 - len(self.model_frames)
@@ -177,6 +190,16 @@ class NeuralRuntime:
                         self.finish_text()
                     sequence.update(self.sequence_metadata())
                     sequence.update(text=self.text, status="finished" if finish else "recognizing",
+                                    provisional=not finish, frames=len(self.frames), modelFrames=len(self.model_frames))
+                    return {"handshapeAvailable": "handshape" in self.models, "handshapeError": self.errors.get("handshape"),
+                            "prediction": prediction, "fingerspelling": sequence}
+                if self.streaming():
+                    # Trained on FSboard including J/Z motion, so no separate motion gate here.
+                    self.text = self.gate_text(self.stream.text())
+                    if finish:
+                        self.finish_text()
+                    sequence.update(self.sequence_metadata())
+                    sequence.update(text=self.text, status="limit" if self.limit_reached else "finished" if finish else "recognizing",
                                     provisional=not finish, frames=len(self.frames), modelFrames=len(self.model_frames))
                     return {"handshapeAvailable": "handshape" in self.models, "handshapeError": self.errors.get("handshape"),
                             "prediction": prediction, "fingerspelling": sequence}

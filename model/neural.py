@@ -104,6 +104,10 @@ def decode_ctc(indices):
 
 def load_checkpoint(path, task):
     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    if task == "sequence":
+        from model import stream_net
+        if checkpoint.get("contract") == stream_net.CONTRACT:
+            return stream_net.load(checkpoint)
     if checkpoint.get("contract") != CONTRACT or checkpoint.get("task") != task:
         raise ValueError(f"Incompatible {task} checkpoint; expected {CONTRACT}.")
     labels = HANDSHAPES if task == "handshape" else VOCAB

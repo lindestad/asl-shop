@@ -23,7 +23,7 @@ export type Recognition = {
     frames: number;
     modelFrames?: number;
     error?: string;
-    method?: "causal-tcn" | "openfs";
+    method?: "causal-tcn" | "fsboard-stream" | "openfs";
     refinementError?: string;
     contextStatus?: "collecting" | "spelling" | "held-letter" | "insufficient-context";
     contextMessage?: string;

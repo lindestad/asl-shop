@@ -92,7 +92,13 @@ export function FingerspellingSummary({ result }: { result: Recognition | null }
           : "Tekstmodellen er ikke tilgjengelig ennå."}
       </p>
       {sequence?.method && (
-        <p>{sequence.method === "openfs" ? "OpenFS · ferdig tekst" : "Nevral sekvensmodell"}</p>
+        <p>
+          {sequence.method === "openfs"
+            ? "OpenFS · ferdig tekst"
+            : sequence.method === "fsboard-stream"
+              ? "Strømmende FSboard-modell · 0,3 s forsinkelse"
+              : "Nevral sekvensmodell"}
+        </p>
       )}
       {sequence?.contextMessage && <p>{sequence.contextMessage}</p>}
       {sequence?.refiner?.enabled && sequence.provisional && (

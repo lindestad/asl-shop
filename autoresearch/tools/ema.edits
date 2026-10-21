@@ -1,0 +1,17 @@
+    stream = batches(train, gen)
+=>    stream = batches(train, gen)
+    ema = torch.optim.swa_utils.AveragedModel(model, multi_avg_fn=torch.optim.swa_utils.get_ema_multi_avg_fn(EMA))
+====
+        opt.step()
+        step += 1
+=>        opt.step()
+        ema.update_parameters(model)
+        step += 1
+====
+    train_seconds = time.perf_counter() - t0
+=>    train_seconds = time.perf_counter() - t0
+    model.load_state_dict(ema.module.state_dict())
+====
+DROPOUT = 0.1
+=>DROPOUT = 0.1
+EMA = 0.999                   # weight EMA decay per step; the EMA weights are saved and scored
