@@ -30,12 +30,11 @@ from scripts.train_openfs_recognizer import batches,read_data,summarize
 
 
 @torch.inference_mode()
-def beam_decode(model,poses,segments,positions,beam_size,max_chars,length_penalty=0.0):
-    memory,padding=model.encode(poses,segments,positions)
-    device=memory.device
+def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penalty=0.0):
     n=len(poses)
-    memory=memory.repeat_interleave(beam_size,dim=0)
-    padding=padding.repeat_interleave(beam_size,dim=0)
+    encoded=[(memory.repeat_interleave(beam_size,dim=0),padding.repeat_interleave(beam_size,dim=0))
+             for memory,padding in (model.encode(poses,segments,positions) for model in models)]
+    device=encoded[0][0].device
     samples=torch.arange(n,device=device).repeat_interleave(beam_size)
     beam_rows=torch.arange(beam_size,device=device)
     prefixes=torch.full((n*beam_size,1),BOS,dtype=torch.long,device=device)
@@ -47,8 +46,12 @@ def beam_decode(model,poses,segments,positions,beam_size,max_chars,length_penalt
     finished_norm=torch.full((n,),-float('inf'),device=device) if length_penalty else None
     for _ in range(max_chars):
         length=prefixes.shape[1]
-        logits,_=model.decode(memory,padding,prefixes)
-        logp=F.log_softmax(logits[:,-1].float(),dim=-1).view(n,beam_size,-1)
+        logp=None
+        for model,(step_memory,step_padding) in zip(models,encoded):
+            logits,_=model.decode(step_memory,step_padding,prefixes)
+            model_logp=F.log_softmax(logits[:,-1].float(),dim=-1)
+            logp=model_logp if logp is None else logp+model_logp
+        logp=(logp/len(models)).view(n,beam_size,-1)
         candidate=(scores.unsqueeze(-1)+logp.masked_fill(~active.unsqueeze(-1),-float('inf'))).flatten(1)
         top,indices=torch.topk(candidate,beam_size,dim=-1)
         vocab=candidate.shape[-1]//beam_size
@@ -135,14 +138,15 @@ def beam_decode(model,poses,segments,positions,beam_size,max_chars,length_penalt
 
 
 @torch.inference_mode()
-def score(model,data,representation,beam_size,max_chars,batch_size,device,split,limit,length_penalty=0.0):
-    model.eval()
+def score(models,data,representation,beam_size,max_chars,batch_size,device,split,limit,length_penalty=0.0):
+    for model in models:
+        model.eval()
     started=time.perf_counter()
     stats=defaultdict(lambda:dict(errors=0,characters=0,exact=0,clips=0))
     examples=[]
     for batch in batches(data,batch_size,representation,limit=limit):
         poses,segments,positions,_,selected=batch
-        decoded=beam_decode(model,poses.to(device),segments.to(device),positions.to(device),beam_size,max_chars,length_penalty)
+        decoded=beam_decode(models,poses.to(device),segments.to(device),positions.to(device),beam_size,max_chars,length_penalty)
         for i,index in enumerate(selected):
             row=data['clips'][index]
             actual=decode_text(decoded[i])
@@ -154,14 +158,14 @@ def score(model,data,representation,beam_size,max_chars,batch_size,device,split,
                 examples.append(dict(name=row['name'],truth=row['text'],prediction=actual))
     metrics=summarize(stats.pop('overall'))
     metrics.update(split=split,per_signer={k:summarize(v) for k,v in stats.items()},examples=examples,
-                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; no dictionary or language correction',
+                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; ensemble of {len(models)} checkpoints (mean of log-posteriors); no dictionary or language correction',
                    seconds=round(time.perf_counter()-started,3))
     return metrics
 
 
 def main():
     p=argparse.ArgumentParser(description='Beam-search evaluation of an offline OpenFS recogniser checkpoint.')
-    p.add_argument('--checkpoint',type=Path,required=True)
+    p.add_argument('--checkpoint',type=Path,nargs='+',required=True,help='one or more checkpoints; multiple checkpoints are ensembled by averaging frame log-posteriors')
     p.add_argument('--data',type=Path,required=True)
     p.add_argument('--splits',nargs='+',default=['validation'],choices=['train','validation','test'])
     p.add_argument('--beam-size',type=int,default=8)
@@ -172,26 +176,36 @@ def main():
     p.add_argument('--output',type=Path,required=True,help='report stem; never loads or writes a checkpoint')
     p.add_argument('--device',default='cuda')
     args=p.parse_args()
-    payload=torch.load(args.checkpoint,map_location='cpu',weights_only=True)
-    if payload.get('contract')!=CONTRACT:
-        raise ValueError('Checkpoint contract mismatch.')
-    representation=payload['representation']
-    max_chars=args.max_chars or payload.get('max_decode',48)
-    model=Recognizer(**payload['architecture']).to(args.device)
-    model.load_state_dict(payload['state_dict'],strict=True)
-    parameters=sum(q.numel() for q in model.parameters())
+    payloads=[torch.load(path,map_location='cpu',weights_only=True) for path in args.checkpoint]
+    for path,payload in zip(args.checkpoint,payloads):
+        if payload.get('contract')!=CONTRACT:
+            raise ValueError(f'Checkpoint contract mismatch: {path}.')
+    representation=payloads[0]['representation']
+    if any(payload['representation']!=representation for payload in payloads):
+        raise ValueError('Ensembled checkpoints must share the same input representation.')
+    architecture=payloads[0]['architecture']
+    if any(payload['architecture']!=architecture for payload in payloads):
+        raise ValueError('Ensembled checkpoints must share the same architecture.')
+    max_chars=args.max_chars or payloads[0].get('max_decode',48)
+    models=[]
+    for payload in payloads:
+        model=Recognizer(**architecture).to(args.device)
+        model.load_state_dict(payload['state_dict'],strict=True)
+        models.append(model)
+    parameters=sum(q.numel() for q in models[0].parameters())
     print(json.dumps(dict(task='recognizer',mode='beam-eval',representation=representation,
-                          parameters=parameters,beam_size=args.beam_size,length_penalty=args.length_penalty,
+                          parameters=parameters,ensemble_size=len(models),beam_size=args.beam_size,length_penalty=args.length_penalty,
                           torch=torch.__version__,device=args.device,
                           gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None)),flush=True)
-    evaluations=[score(model,read_data(args.data,name),representation,args.beam_size,max_chars,
+    evaluations=[score(models,read_data(args.data,name),representation,args.beam_size,max_chars,
                        args.batch_size,args.device,name,args.limit,args.length_penalty) for name in args.splits]
     for metrics in evaluations:
         print(json.dumps({key:metrics[key] for key in ('split','cer','letter_accuracy','exact_sequence_accuracy',
                                                         'clips','characters','errors','exact','seconds')}),flush=True)
     peak=torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
     report=dict(task='recognizer',mode='beam-eval',representation=representation,parameters=parameters,
-                beam_size=args.beam_size,length_penalty=args.length_penalty,max_chars=max_chars,checkpoint=str(args.checkpoint.resolve()),
+                ensemble_size=len(models),beam_size=args.beam_size,length_penalty=args.length_penalty,max_chars=max_chars,
+                checkpoints=[str(path.resolve()) for path in args.checkpoint],
                 evaluations=evaluations,dataset=json.loads((args.data/'dataset.json').read_text()),
                 torch=torch.__version__,peak_vram_mib=round(peak/2**20),
                 gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None)
