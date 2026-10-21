@@ -6,7 +6,14 @@ pass. Update "Current best" in place when a run beats it.
 
 ## Current best
 
-- two-checkpoint log-posterior ensemble of the cosine+EMA epoch-62 and step-schedule
+- three-checkpoint cross-architecture log-posterior ensemble: cosine+EMA epoch-62 and
+  step-schedule epoch-84 full-data gaps transformers (8,828,348 params each) plus the
+  6-layer step-schedule epoch-82 full-data gaps transformer (17,509,820 params;
+  35,166,516 total), beam search width 8, mean of per-step log-posteriors, no
+  dictionary or language correction: **4.20% CER**, 68.69% exact (12,521 test
+  strings, 21 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens3-e62-s84-l6e82.beam-eval-report.json`)
+- previous: two-checkpoint log-posterior ensemble of the cosine+EMA epoch-62 and step-schedule
   epoch-84 full-data gaps transformers (8,828,348 params each, 17,656,696 total),
   beam search width 8, mean of per-step log-posteriors, no dictionary or language
   correction: **4.52% CER**, 66.92% exact (12,521 test strings, 21 Oct 2026,
@@ -633,3 +640,37 @@ pass. Update "Current best" in place when a run beats it.
   beam-8 validation gate vs 4.89%; only 3-layer runs feed ensembles.
 - Verdict: negative on the primary metric; retire multi-snapshot ensembling
   within the same run.
+
+### 2026-10-21 — cross-architecture 3-checkpoint ensemble (+layers6 e82): **NEW BEST 4.20% CER / 68.69% exact**
+
+- Idea: harvest triggers not fired (cosine+EMA greedy val-best still epoch 62 at 5.51%
+  through epoch 96/150) and `gpu_budget.sh 6144` failed (1,879 MiB free), so
+  evaluation-only experiment. The ens4 entry showed same-run snapshots add no
+  diversity; the untested diversity source is architecture. Named experiment:
+  **cross-architecture checkpoint ensembling** - add the 6-layer step-schedule
+  epoch-82 val-best (greedy 5.85% / 59.40%, snapshotted as `recognizer-epoch82.pt`)
+  to the winning 2-member ensemble (cos-EMA e62 + step-84), mean of per-step
+  log-posteriors, beam 8.
+- Code: `scripts/beam_eval_openfs_recognizer.py` now permits mixed architectures
+  (contract + representation + label-vocabulary checks kept; per-checkpoint
+  architectures and summed parameter count recorded). Sanity: e62 self-ensemble
+  reproduced the recorded 32-clip smoke byte-identical (0.0660522 CER / 15 exact).
+- Validation (12,015 clips, beam 8): **4.65% CER** (9,856 errors) / **64.67% exact**
+  (7,770) vs 2-member gate 4.89% / 63.30% - beats both; test pass earned.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens3-e62-s84-l6e82.beam-eval-report.json`
+- Test (12,521 clips, beam 8): **4.20% CER** (9,294 errors) / **68.69% exact**
+  (8,601) - new best on both metrics, previous 4.52% / 66.92%.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens3-e62-s84-l6e82.beam-eval-report.json`
+- Params: 8,828,348 x2 + 17,509,820 = 35,166,516. Cost: smoke 15 s / 491 MiB;
+  validation 4,362 s / 725 MiB; test 4,638 s / 628 MiB (batch 8, nice -n 19, shared GPU).
+- Finding: cross-architecture diversity works where same-run snapshot diversity failed -
+  the weaker 6-layer member (alone 5.85% greedy) still gained 0.32 pp test CER over the
+  2-member ensemble. Ensembles need diverse members, not just more members. layers6 is
+  the only 6-layer checkpoint; a second independent 6-layer recipe would be the next
+  diversity axis if capacity ever frees up.
+- Status at harvest: cosine+EMA (PID 670605) epoch ~107/150, greedy val-best epoch 62
+  (5.51%); layers6 (PID 787811) epoch ~94/100, val-best epoch 82 (5.85%), post-lr-step
+  epochs may still improve it - if so, re-ensemble the newer e-checkpoint.
+- Next gates reference 4.65% validation CER and 4.20% test CER. Next trigger: either
+  run's greedy val-best materially improves (cos-EMA <= 5.21% or layers6 <= 5.55%).
+- Verdict: positive; new best recorded.

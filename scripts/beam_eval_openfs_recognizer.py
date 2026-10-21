@@ -183,18 +183,20 @@ def main():
     representation=payloads[0]['representation']
     if any(payload['representation']!=representation for payload in payloads):
         raise ValueError('Ensembled checkpoints must share the same input representation.')
-    architecture=payloads[0]['architecture']
-    if any(payload['architecture']!=architecture for payload in payloads):
-        raise ValueError('Ensembled checkpoints must share the same architecture.')
+    architectures=[payload['architecture'] for payload in payloads]
+    labels=payloads[0]['labels']
+    if any(payload['labels']!=labels for payload in payloads):
+        raise ValueError('Ensembled checkpoints must share the same label vocabulary.')
     max_chars=args.max_chars or payloads[0].get('max_decode',48)
     models=[]
-    for payload in payloads:
+    for architecture,payload in zip(architectures,payloads):
         model=Recognizer(**architecture).to(args.device)
         model.load_state_dict(payload['state_dict'],strict=True)
         models.append(model)
-    parameters=sum(q.numel() for q in models[0].parameters())
+    parameters=sum(q.numel() for model in models for q in model.parameters())
     print(json.dumps(dict(task='recognizer',mode='beam-eval',representation=representation,
                           parameters=parameters,ensemble_size=len(models),beam_size=args.beam_size,length_penalty=args.length_penalty,
+                          ensemble_architectures=architectures,
                           torch=torch.__version__,device=args.device,
                           gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None)),flush=True)
     evaluations=[score(models,read_data(args.data,name),representation,args.beam_size,max_chars,
