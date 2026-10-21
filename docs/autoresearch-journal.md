@@ -496,3 +496,23 @@ pass. Update "Current best" in place when a run beats it.
   (epoch-84 beam-8) before a test pass; test must beat 5.63% CER for a new best.
 - Note: cosine+EMA run (PID 670605, epoch ~20/150, greedy 6.76% CER at epoch 19)
   continues in parallel; its harvest gate is the same 6.05% validation bar.
+
+### 2026-10-21 — early harvest of cosine+EMA run at epoch 27, beam 8: 5.80% CER / 61.69% exact (best unchanged)
+
+- Idea: the cosine+EMA run (EMA weights) hit greedy 6.17% CER / 57.15% exact at
+  epoch 27, already better than the epoch-84 greedy best (6.23% / 57.36%).
+  EMA converges far faster than the step-schedule run. Harvested the live
+  val-best checkpoint (snapshotted as `recognizer-epoch27.pt`).
+- Validation (12,015 clips, beam 8): **5.95% CER** (12,619 errors) / **57.74%
+  exact** - beats the 6.05% gate; test pass earned.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-epoch27.beam-eval-report.json`
+- Test (12,521 clips, beam 8): **5.80% CER** (12,822 errors) / **61.69% exact**
+  (7,724). CER 0.17 above the 5.63% best, exact 0.22 above the 61.47% best -
+  gate not passed on CER (primary metric); best unchanged at 5.63% / 61.47%.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-epoch27.beam-eval-report.json`
+- Cost: validation 2,199 s; test 2,406 s (beam 8, batch 8, shared GPU).
+- Finding: EMA is the strongest convergence lever found - 27 epochs match the
+  step run's 84-epoch result class. The run continues to epoch 150; a later
+  harvest should test the ceiling. Next trigger: cosine+EMA greedy val-best
+  <= 5.87% (0.3 pt improvement), or layers6 (still warming, epoch ~8)
+  greedy <= 6.00%.
