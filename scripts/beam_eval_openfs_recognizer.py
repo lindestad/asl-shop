@@ -9,6 +9,11 @@ deterministic) and all model x rotation frame log-posteriors are fused geometric
 
   python scripts/beam_eval_openfs_recognizer.py --checkpoint <recognizer.pt> --data data/openfs-packed \
       --splits validation --beam-size 8 --output <stem>   # writes <stem>.beam-eval-report.json
+
+Mixed-representation ensembles are allowed when every checkpoint carries the gap-preserving
+timeline (gaps, wrist2d): each model encodes its own representation of the identical clip
+batch (same segments/positions) and all frame log-posteriors fuse as before; `compressed`
+checkpoints use a different timeline and stay single-representation.
 """
 import argparse
 from collections import defaultdict
@@ -41,10 +46,14 @@ def rotate_pose(pose,segments,degrees):
                         dtype=pose.dtype,device=pose.device)
     rotated=pose.clone()
     for base in (0,45):
+        if base+42>rotated.shape[2]:
+            continue
         hand=rotated[:,:,base:base+42].reshape(rotated.shape[0],rotated.shape[1],21,2)@matrix
         rotated[:,:,base:base+42]=hand.reshape(rotated.shape[0],rotated.shape[1],42)
-    rotated[:,:,42:44]=rotated[:,:,42:44]@matrix
-    rotated[:,:,87:89]=rotated[:,:,87:89]@matrix
+    if rotated.shape[2]>=44:
+        rotated[:,:,42:44]=rotated[:,:,42:44]@matrix
+    if rotated.shape[2]>=89:
+        rotated[:,:,87:89]=rotated[:,:,87:89]@matrix
     mask=(segments!=PAD_SEG).unsqueeze(-1)
     return torch.where(mask,rotated,pose)
 
@@ -110,12 +119,13 @@ def context_codes(prefixes, order, device):
 
 
 @torch.inference_mode()
-def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penalty=0.0,weights=None,fusion='logprob',rotations=(0.0,),lm=None):
-    n=len(poses)
-    pose_variants=[rotate_pose(poses,segments,degrees) for degrees in rotations]
-    encoded=[[(memory.repeat_interleave(beam_size,dim=0),padding.repeat_interleave(beam_size,dim=0))
-              for memory,padding in (model.encode(variant,segments,positions) for variant in pose_variants)]
-             for model in models]
+def beam_decode(models,poses_by_model,segments,positions,beam_size,max_chars,length_penalty=0.0,weights=None,fusion='logprob',rotations=(0.0,),lm=None):
+    n=len(poses_by_model[0])
+    encoded=[]
+    for model,poses in zip(models,poses_by_model):
+        pose_variants=[rotate_pose(poses,segments,degrees) for degrees in rotations]
+        encoded.append([(memory.repeat_interleave(beam_size,dim=0),padding.repeat_interleave(beam_size,dim=0))
+                        for memory,padding in (model.encode(variant,segments,positions) for variant in pose_variants)])
     device=encoded[0][0][0].device
     samples=torch.arange(n,device=device).repeat_interleave(beam_size)
     beam_rows=torch.arange(beam_size,device=device)
@@ -242,15 +252,22 @@ def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penal
 
 
 @torch.inference_mode()
-def score(models,data,representation,beam_size,max_chars,batch_size,device,split,limit,length_penalty=0.0,weights=None,fusion='logprob',rotations=(0.0,),lm=None,lm_description=None):
+def score(models,data,representations,beam_size,max_chars,batch_size,device,split,limit,length_penalty=0.0,weights=None,fusion='logprob',rotations=(0.0,),lm=None,lm_description=None):
     for model in models:
         model.eval()
     started=time.perf_counter()
     stats=defaultdict(lambda:dict(errors=0,characters=0,exact=0,clips=0))
     examples=[]
-    for batch in batches(data,batch_size,representation,limit=limit):
-        poses,segments,positions,_,selected=batch
-        decoded=beam_decode(models,poses.to(device),segments.to(device),positions.to(device),beam_size,max_chars,length_penalty,weights,fusion,rotations,lm)
+    unique=list(dict.fromkeys(representations))
+    iterators=[batches(data,batch_size,rep,limit=limit) for rep in unique]
+    for batch_tuple in zip(*iterators):
+        base=batch_tuple[0]
+        segments,positions,selected=base[1],base[2],base[4]
+        for batch in batch_tuple[1:]:
+            if batch[4]!=selected or not torch.equal(batch[1],segments) or not torch.equal(batch[2],positions):
+                raise ValueError('Mixed-representation batches diverged; gap-preserving timelines are not aligned.')
+        poses_by_rep={rep:batch[0].to(device) for rep,batch in zip(unique,batch_tuple)}
+        decoded=beam_decode(models,[poses_by_rep[rep] for rep in representations],segments.to(device),positions.to(device),beam_size,max_chars,length_penalty,weights,fusion,rotations,lm)
         for i,index in enumerate(selected):
             row=data['clips'][index]
             actual=decode_text(decoded[i])
@@ -262,7 +279,7 @@ def score(models,data,representation,beam_size,max_chars,batch_size,device,split
                 examples.append(dict(name=row['name'],truth=row['text'],prediction=actual))
     metrics=summarize(stats.pop('overall'))
     metrics.update(split=split,per_signer={k:summarize(v) for k,v in stats.items()},examples=examples,
-                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; ensemble of {len(models)} checkpoints ({"arithmetic mean of frame probabilities" if fusion=="prob" else "weighted mean of log-posteriors"}, weights {weights}); input rotations {list(rotations)}; {lm_description if lm_description else "no dictionary or language correction"}',
+                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; ensemble of {len(models)} checkpoints over representations {representations} ({"arithmetic mean of frame probabilities" if fusion=="prob" else "weighted mean of log-posteriors"}, weights {weights}); input rotations {list(rotations)}; {lm_description if lm_description else "no dictionary or language correction"}',
                    seconds=round(time.perf_counter()-started,3))
     return metrics
 
@@ -289,9 +306,10 @@ def main():
     for path,payload in zip(args.checkpoint,payloads):
         if payload.get('contract')!=CONTRACT:
             raise ValueError(f'Checkpoint contract mismatch: {path}.')
-    representation=payloads[0]['representation']
-    if any(payload['representation']!=representation for payload in payloads):
-        raise ValueError('Ensembled checkpoints must share the same input representation.')
+    representations=[payload['representation'] for payload in payloads]
+    for representation in representations:
+        if representation not in ('gaps','wrist2d'):
+            raise ValueError('Ensembled checkpoints must use gap-preserving representations (gaps, wrist2d).')
     architectures=[payload['architecture'] for payload in payloads]
     labels=payloads[0]['labels']
     if any(payload['labels']!=labels for payload in payloads):
@@ -313,7 +331,7 @@ def main():
         lm=(build_ngram_lm(train_texts,args.lm_order,args.device),args.lm_weight,args.lm_order)
         lm_description=(f'character {args.lm_order}-gram Witten-Bell interpolated LM built from the '
                         f'{len(train_texts)} train-split reference texts, shallow-fused with weight {args.lm_weight}')
-    print(json.dumps(dict(task='recognizer',mode='beam-eval',representation=representation,
+    print(json.dumps(dict(task='recognizer',mode='beam-eval',representations=representations,
                           parameters=parameters,ensemble_size=len(models),ensemble_weights=weights,beam_size=args.beam_size,length_penalty=args.length_penalty,fusion=args.fusion,
                           tta_rot_degrees=args.tta_rot_degrees,
                           lm_weight=args.lm_weight,lm_order=args.lm_order,
@@ -322,14 +340,14 @@ def main():
                           gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None)),flush=True)
     if args.fusion=='prob' and any(degrees!=0.0 for degrees in args.tta_rot_degrees):
         raise ValueError('--tta-rot-degrees currently supports only --fusion logprob.')
-    evaluations=[score(models,read_data(args.data,name),representation,args.beam_size,max_chars,
+    evaluations=[score(models,read_data(args.data,name),representations,args.beam_size,max_chars,
                        args.batch_size,args.device,name,args.limit,args.length_penalty,weights,args.fusion,
                        tuple(args.tta_rot_degrees),lm,lm_description) for name in args.splits]
     for metrics in evaluations:
         print(json.dumps({key:metrics[key] for key in ('split','cer','letter_accuracy','exact_sequence_accuracy',
                                                         'clips','characters','errors','exact','seconds')}),flush=True)
     peak=torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
-    report=dict(task='recognizer',mode='beam-eval',representation=representation,parameters=parameters,
+    report=dict(task='recognizer',mode='beam-eval',representations=representations,parameters=parameters,
                 ensemble_size=len(models),ensemble_weights=weights,beam_size=args.beam_size,length_penalty=args.length_penalty,fusion=args.fusion,max_chars=max_chars,
                 tta_rot_degrees=args.tta_rot_degrees,
                 lm_weight=args.lm_weight,lm_order=args.lm_order,

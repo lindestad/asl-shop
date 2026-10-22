@@ -877,3 +877,47 @@ pass. Update "Current best" in place when a run beats it.
   4.65% val / 4.20% test; triggers unchanged (cos-EMA greedy <= 5.21%, l6-cos-EMA
   greedy <= 5.55%).
 - Verdict: negative on the primary metric; retire LM shallow fusion.
+
+### 2026-10-22 — representation-diversity ensemble member (pre-loop wrist2d): 4.63% val CER (gate nominally earned) but 4.22% test CER; sixth val/test sign flip; best unchanged
+
+- Idea: harvest triggers not fired (cos-EMA greedy val-best still epoch 62 at 5.51%
+  through epoch ~147/150; l6-cos-EMA epoch 23, epoch-14 greedy 6.53% > 5.55% trigger;
+  seed2 epoch ~13/100) and `gpu_budget.sh 6144` failed (2,531 MiB free), so
+  evaluation-only experiment. Membership is the only open lever; the untried diversity
+  axis is the **input representation**: the pre-loop (19 Oct) full-data `wrist2d`
+  checkpoint (8,815,804 params, greedy val 6.98% / test 6.59% CER) sees the identical
+  gap-preserving timeline as the gaps members (same segments/positions; 42 dominant-hand
+  wrist columns instead of 91), so per-frame log-posterior fusion stays aligned.
+  Named experiment: **representation-diversity ensemble** - ens3 + wrist2d as 4th
+  member, equal weights, beam 8, no dictionary or language correction.
+- Code: `scripts/beam_eval_openfs_recognizer.py` now accepts mixed representations
+  (gaps + wrist2d; `compressed` rejected - different timeline): per-representation
+  batch iterators over the same deterministic groups with alignment asserts (identical
+  selected indices, segments, positions), per-model pose encoding, width-safe
+  `rotate_pose`. Sanity: ens3 32-clip smoke reproduced the recorded baseline
+  byte-identical (0.0599078341 / 20 exact); wrist2d-alone smoke 41 errors / 16 exact.
+- Screening (greedy, first 4,000 validation clips): ens3 4.904% (3,422 - third exact
+  reproduction of this baseline); ens4+wrist2d **4.851%** (3,385, -37 errors).
+- Validation (12,015 clips, beam 8): **4.63% CER** (9,817 errors) / **64.58% exact**
+  (7,759) vs gate 4.65% (9,856) / 64.67% - -39 errors (0.02 pp) but exact -11; gate
+  nominally earned; test pass taken.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-w2d.beam-eval-report.json`
+- Test (12,521 clips, beam 8): **4.22% CER** (9,340 errors) / **68.41% exact** (8,565)
+  - worse than the 4.20% / 68.69% best on both metrics; sixth validation/test sign flip
+  of a sub-0.05 pp validation delta; best unchanged.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-w2d.beam-eval-report.json`
+- Params: 35,166,516 + 8,815,804 = 43,982,320. Cost: smokes 2x ~15 s; greedy subsets
+  544 + 592 s / 205-243 MiB; validation 6,531 s / 815 MiB; test 6,418 s / 708 MiB
+  (batch 8, nice -n 19, shared GPU, three training jobs active).
+- Finding: representation diversity fails with this member - the wrist2d run is a whole
+  recipe generation behind the current class (6.98% greedy val vs l6-e82's 5.85%), and
+  the screening/-val gains it showed did not survive to test, exactly like the other
+  five sub-0.05 pp val edges. Diversity only pays when members are near the member-class
+  quality bar. With fusion rule, weights, snapshots, input TTA, LM and now representation
+  all retired, the only remaining path to a new best is new members at the 5.5% greedy
+  class: l6-cos-EMA and seed2 in flight, and the champion cos-EMA run (epoch ~147/150)
+  finishing soon will free GPU capacity for the next training lever.
+- Status: gates unchanged: 4.65% val / 4.20% test; triggers unchanged (cos-EMA greedy
+  <= 5.21%, l6-cos-EMA greedy <= 5.55%).
+- Verdict: negative on the primary metric; retire pre-loop-recipe representation
+  diversity as an ensemble axis.
