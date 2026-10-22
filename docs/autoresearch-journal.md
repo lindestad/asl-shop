@@ -771,3 +771,35 @@ pass. Update "Current best" in place when a run beats it.
   4.65% val / 4.20% test; triggers unchanged: cos-EMA greedy <= 5.21% or
   l6-cos-EMA greedy <= 5.55%.
 - Verdict: negative on the primary metric; retire ensemble fusion-rule tuning.
+
+### 2026-10-22 — launched seed-diversity ensemble member: cosine+EMA 3-layer, seed 20261022 (run in progress)
+
+- Idea: harvest triggers not fired (cos-EMA greedy val-best still epoch 62 at 5.51%
+  through epoch 126/150; l6-cos-EMA epoch 8/150, greedy 8.52% and falling fast) and
+  `gpu_budget.sh 6144` failed (3,603 MiB free). All eval-side levers are retired
+  (beam width, length penalty, member weighting, fusion rule, same-run snapshots);
+  the only open lever is ensemble membership, and the untried diversity axis is
+  **seed**: every existing member (e62, step-84, l6-e82) is a seed-42 run. Named
+  experiment: **seed-diversity ensemble member**.
+- Architecture: default gaps transformer, 8,828,348 params - identical to the two
+  3-layer ens members, so member compatibility is guaranteed; only initialization/
+  augmentation randomness differs.
+- Config: `--epochs 100 --lr-schedule cosine --warmup-epochs 5 --ema-decay 0.99995
+  --seed 20261022`, full 126,131-clip train slice, gaps, Adam 1e-4, fp16 AMP. Two
+  declared deviations from the champion recipe: (i) batch 4 - budget check failed,
+  so per rule 2 halved from the champion's 8; 2x steps/epoch at unchanged lr (the
+  12k-run precedent caveat); (ii) 100-epoch cosine, not 150 - the champion set no
+  new val-best in 60+ epochs past epoch 62, so the long tail demonstrably does not
+  pay; EMA decay 0.99995 keeps the averaging horizon epoch-matched (~20k steps,
+  ~0.65 epochs) at the doubled steps/epoch.
+- Smoke: 400 clips at batch 4 / validation-batch 16 peaked 315 MiB; steady-state
+  footprint ~930 MiB (free 3,603 -> 2,675 MiB), inside the 6 GiB budget.
+- Params: 8,828,348. Wall clock: ~28 steps/s with three jobs sharing the GPU ->
+  ~1,115 s train + ~150 s validation = ~21 min/epoch, 100 epochs ~35 h (will
+  shorten when the cos-EMA full run finishes its last ~24 epochs).
+- Output: `data/models/openfs-recognizer-gaps-full-cosine-ema-seed2/recognizer.pt`
+  (PID 1182605, log/pid under `data/logs/`). No test evaluation; none earned.
+- Gates unchanged: 4.65% val / 4.20% test. Harvest trigger: its greedy val-best
+  reaches the 5.5-6.0% class (e62/l6-e82 class) -> snapshot, re-ensemble as 4th
+  member and beam-8 validation gate vs 4.65%; only then test.
+- Verdict: pending; run in progress.
