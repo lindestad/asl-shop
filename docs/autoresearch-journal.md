@@ -706,3 +706,33 @@ pass. Update "Current best" in place when a run beats it.
   checkpoint to harvest); cos-EMA (PID 670605) epoch ~113/150, best epoch 62 (5.51%).
   Gates unchanged: 4.65% val / 4.20% test; next trigger cos-EMA greedy val-best <= 5.21%.
 - Verdict: negative on the primary metric; retire member-weight tuning.
+
+
+### 2026-10-22 — launched second independent 6-layer recipe: cosine+EMA, full data (run in progress)
+
+- Idea: harvest triggers not fired (cos-EMA greedy val-best still epoch 62 at 5.51%
+  through epoch 114/150, epochs 90-114 all worse) and eval-only levers are all
+  retired, so take the lever named twice by the ensemble entries: a second
+  independent 6-layer recipe - the untested diversity axis for the ensemble. The
+  layers6 step run finishing freed GPU capacity (6,143 MiB free).
+- Architecture: 6-layer gaps transformer, d_model 256, heads 8, feedforward 2048;
+  17,509,820 params - same arch as the ens3 l6-e82 member, so ensembles can grow
+  on recipe diversity where same-run snapshot diversity already failed.
+- Config: replicate the winning 3-layer full-data recipe on the 6-layer arch,
+  single-schedule variable vs the layers6 step run: `--layers 6 --epochs 150
+  --lr-schedule cosine --warmup-epochs 5 --ema-decay 0.9999`, full 126,131-clip
+  train slice, gaps, Adam 1e-4, fp16 AMP (V100), seed 42 (default). EMA decay
+  matches the cos-EMA full-data run at identical 15,766 steps/epoch (batch 8).
+- Batch 8 (not 16): `scripts/gpu_budget.sh 6144` failed by 1 MiB (6,143 free), so
+  per rule 2 the batch was halved; same forced deviation as the champion cos-EMA
+  run, so the two cosine+EMA runs stay batch-matched.
+- Smoke: `--layers 6 --epochs 2 --limit-clips 1600` at batch 8 peaked 1,123 MiB.
+- Params: 17,509,820. VRAM: ~1.9 GiB (free 6,143 -> 4,227 MiB), inside budget.
+  Wall clock: ~18 steps/s -> ~15-17 min/epoch incl validation, ETA ~40+ h for 150
+  epochs with the cos-EMA run still sharing the GPU (epoch ~115/150).
+- Output: `data/models/openfs-recognizer-gaps-full-layers6-cosine-ema/recognizer.pt`
+  (PID 1134787, log/pid under `data/logs/`). No test evaluation; none earned.
+- Gates: unchanged, 4.65% val / 4.20% test. Harvest trigger: its greedy val-best
+  <= 5.55% (beats l6-e82's 5.85% greedy) -> snapshot, beam-8 validation gate vs
+  4.65%, and re-ensemble as 4th member only if it beats ens3 on validation.
+- Verdict: pending; run in progress.
