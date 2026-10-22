@@ -997,3 +997,33 @@ pass. Update "Current best" in place when a run beats it.
   val-best <= 4.90% -> refresh the 4th member again and re-gate; seed2 -> screen as 5th
   member on validation first (seed-diversity axis, never tested).
 - Verdict: positive; new best recorded.
+
+### 2026-10-22 — seed-diversity 5th ensemble member (seed2 e32): 4.40% val CER (gate nominally earned, -4 errors) but 4.09% test CER; seventh val/test sign flip; best unchanged
+
+- Idea: seed2's <=6.00% greedy 5th-member trigger fired (val-best epoch 32, greedy 5.87% /
+  58.22%). `gpu_budget.sh 6144` failed (3,991 MiB free), evaluation-only. Named experiment:
+  **seed-diversity ensemble member** - add frozen `recognizer-epoch32.pt` of the seed-20261022
+  cosine+EMA 3-layer run (8,828,348 params, identical arch to the e62/step-84 members) to the
+  winning ens4 (e62 + step-84 + l6-e82 + l6ce37), equal weights, logprob fusion, beam 8, no
+  dictionary or language correction.
+- Smoke: 5-member 32-clip validation smoke 33 errors / 20 exact (vs 35 / 20 for the ens4 set).
+- Validation (12,015 clips, beam 8): **4.40% CER** (9,328 errors) / **65.48% exact** (7,867)
+  vs ens4 gate 4.40% (9,332) / 65.38% - only -4 errors (0.002 pp), exact +12; gate nominally
+  earned; test pass taken.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-l6ce37-seede32.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **4.09% CER** (9,037 errors) / **69.24% exact** (8,669)
+  - worse than the 4.03% / 69.26% best on both metrics (+130 errors); seventh val/test sign
+  flip; best unchanged.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-l6ce37-seede32.beam-eval-report.json`
+- Params: 52,676,336 + 8,828,348 = 61,504,684. Cost: smoke 21 s / 673 MiB; validation 5,717 s /
+  966 MiB; test 6,152 s / 844 MiB (batch 8, nice -n 19, shared GPU, two training jobs active).
+- Finding: seed diversity fails as an ensemble axis at this member set - a third 3-layer
+  cosine+EMA-recipe member is near-duplicate of e62 and adds nothing, unlike architecture/recipe
+  diversity which worked twice. Consistent with the member-quality bar: a mid-run 5.87% member
+  cannot beat the marginal cost even when nominally the best member ever of its arch. Do not
+  carry seed2; ensemble growth must come from materially better or structurally different members.
+- Status: l6-cos-EMA (PID 1134787) epoch ~55, val-best epoch 54 at **4.89% / 62.74%** - the
+  <=4.90% 4th-member refresh trigger has fired; seed2 (PID 1182605) epoch ~39, best 5.73%.
+  Gates unchanged: 4.40% val / 4.03% test. Next iteration: refresh 4th member
+  l6ce37 -> newest val-best snapshot and re-gate.
+- Verdict: negative on the primary metric; retire seed-diversity ensembling.
