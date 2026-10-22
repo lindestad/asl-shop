@@ -6,7 +6,14 @@ pass. Update "Current best" in place when a run beats it.
 
 ## Current best
 
-- three-checkpoint cross-architecture log-posterior ensemble: cosine+EMA epoch-62 and
+- four-checkpoint cross-architecture/cross-recipe log-posterior ensemble: cosine+EMA
+  epoch-62 and step-schedule epoch-84 full-data gaps transformers (8,828,348 params
+  each) plus 6-layer step-schedule epoch-82 and 6-layer cosine+EMA epoch-26 full-data
+  gaps transformers (17,509,820 params each; 52,676,336 total), beam search width 8,
+  mean of per-step log-posteriors, no dictionary or language correction:
+  **4.14% CER**, 68.71% exact (12,521 test strings, 22 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-l6ce26.beam-eval-report.json`)
+- previous: three-checkpoint cross-architecture log-posterior ensemble: cosine+EMA epoch-62 and
   step-schedule epoch-84 full-data gaps transformers (8,828,348 params each) plus the
   6-layer step-schedule epoch-82 full-data gaps transformer (17,509,820 params;
   35,166,516 total), beam search width 8, mean of per-step log-posteriors, no
@@ -921,3 +928,36 @@ pass. Update "Current best" in place when a run beats it.
   <= 5.21%, l6-cos-EMA greedy <= 5.55%).
 - Verdict: negative on the primary metric; retire pre-loop-recipe representation
   diversity as an ensemble axis.
+
+### 2026-10-22 — harvested l6-cos-EMA epoch-26 as 4th ensemble member: **NEW BEST 4.14% CER / 68.71% exact**
+
+- Idea: the standing trigger fired - l6-cos-EMA greedy validation-best hit epoch 26 at
+  **5.40% CER / 59.95% exact**, below the 5.55% bar and the strongest greedy member ever
+  recorded (better than e62's 5.51%). `gpu_budget.sh 6144` failed (4,031 MiB free), so
+  evaluation-only: named experiment **recipe-diversity within the 6-layer architecture** -
+  add the frozen `recognizer-epoch26.pt` snapshot to the winning ens3 (e62 + step-84 +
+  l6-e82) as a 4th member, equal weights, logprob fusion, beam 8, no dictionary or
+  language correction.
+- Smoke: 4-member 32-clip validation smoke live (0.0491552 CER / 32 errors / 19 exact vs
+  the recorded ens3 smoke 0.0599078 / 39 / 20).
+- Validation (12,015 clips, beam 8): **4.48% CER** (9,501 errors) / **65.03% exact**
+  (7,813) vs ens3 gate 4.65% (9,856) / 64.67% - 355 fewer errors, +43 exact; far above
+  the sub-0.05 pp noise band, so test pass earned (rule 3).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-l6ce26.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **4.14% CER** (9,146 errors) / **68.71% exact**
+  (8,603) - new best on both metrics, previous 4.20% / 68.69%. First validation gain
+  that clearly transferred to test CER (the six sign flips were all sub-0.05 pp edges).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-l6ce26.beam-eval-report.json`
+- Params: 8,828,348 x2 + 17,509,820 x2 = 52,676,336. Cost: smoke 18 s / 608 MiB;
+  validation 5,021 s / 879 MiB; test 5,454 s / 766 MiB (batch 8, nice -n 19, shared GPU,
+  two training jobs active).
+- Finding: recipe diversity repeats inside the 6-layer arch exactly as it did across the
+  3-layer step/cos-EMA pair; the member-quality bar is real - a member at 5.40% greedy
+  pays where the 6.98% wrist2d member did not.
+- Status: full-data cos-EMA run finished 150/150 (val-best e62 5.51%, no new member);
+  l6-cos-EMA (PID 1134787) still improving, val-best now epoch 33 at **5.17% / 60.94%** -
+  newer than the ensembled e26; seed2 (PID 1182605) epoch 25, best 6.18% / 56.12%.
+- Next gates reference 4.48% validation CER and 4.14% test CER. Triggers: l6-cos-EMA
+  greedy val-best <= 4.90% or run plateau/finish -> refresh the 4th member with the newer
+  snapshot and re-gate; seed2 greedy val-best <= 6.00% -> candidate 5th member.
+- Verdict: positive; new best recorded.
