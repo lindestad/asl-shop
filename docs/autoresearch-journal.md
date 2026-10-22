@@ -8,10 +8,13 @@ pass. Update "Current best" in place when a run beats it.
 
 - four-checkpoint cross-architecture/cross-recipe log-posterior ensemble: cosine+EMA
   epoch-62 and step-schedule epoch-84 full-data gaps transformers (8,828,348 params
-  each) plus 6-layer step-schedule epoch-82 and 6-layer cosine+EMA epoch-26 full-data
+  each) plus 6-layer step-schedule epoch-82 and 6-layer cosine+EMA epoch-37 full-data
   gaps transformers (17,509,820 params each; 52,676,336 total), beam search width 8,
   mean of per-step log-posteriors, no dictionary or language correction:
-  **4.14% CER**, 68.71% exact (12,521 test strings, 22 Oct 2026,
+  **4.03% CER**, 69.26% exact (12,521 test strings, 22 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-l6ce37.beam-eval-report.json`)
+- previous: same ensemble with the 6-layer cosine+EMA epoch-26 member instead of
+  epoch-37: **4.14% CER**, 68.71% exact (22 Oct 2026,
   `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-l6ce26.beam-eval-report.json`)
 - previous: three-checkpoint cross-architecture log-posterior ensemble: cosine+EMA epoch-62 and
   step-schedule epoch-84 full-data gaps transformers (8,828,348 params each) plus the
@@ -960,4 +963,37 @@ pass. Update "Current best" in place when a run beats it.
 - Next gates reference 4.48% validation CER and 4.14% test CER. Triggers: l6-cos-EMA
   greedy val-best <= 4.90% or run plateau/finish -> refresh the 4th member with the newer
   snapshot and re-gate; seed2 greedy val-best <= 6.00% -> candidate 5th member.
+- Verdict: positive; new best recorded.
+
+### 2026-10-22 — refreshed 4th ensemble member to l6-cos-EMA epoch-37: **NEW BEST 4.03% CER / 69.26% exact**
+
+- Idea: the 4th member was the frozen l6-cos-EMA epoch-26 snapshot (greedy 5.40%); the run
+  kept setting val-bests, so per the "only re-ensemble materially newer val-bests" rule,
+  swap in the fresher one. `gpu_budget.sh 6144` failed (3,991 MiB free), evaluation-only.
+  The live `recognizer.pt` had just saved epoch 37 (greedy **5.11% / 61.53%** - 0.29 pp
+  better than e26, far above the sub-0.05 pp noise band), frozen as `recognizer-epoch37.pt`.
+  Named experiment: **4th-member refresh** - ens3 members unchanged, l6ce26 -> l6ce37,
+  equal weights, logprob fusion, beam 8, no dictionary or language correction.
+- Smoke: 4-member 32-clip validation smoke 35 errors / 20 exact (vs recorded 32 / 19 for
+  the e26 set - smoke-level noise, full-val gate decides).
+- Validation (12,015 clips, beam 8): **4.40% CER** (9,332 errors) / **65.38% exact** (7,855)
+  vs e26-member gate 4.48% (9,501) / 65.03% - 169 fewer errors, +42 exact, above the noise
+  band; test pass earned.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-l6ce37.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **4.03% CER** (8,907 errors) / **69.26% exact** (8,672)
+  - new best on both metrics, previous 4.14% / 68.71%; second clean val->test transfer
+  (-0.08 pp val -> -0.11 pp test).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-l6ce37.beam-eval-report.json`
+- Params: unchanged 52,676,336 (member swap, same arch). Cost: smoke 18 s / 608 MiB;
+  validation 5,022 s / 879 MiB; test 5,458 s / 766 MiB (batch 8, nice -n 19, two training
+  jobs sharing the GPU).
+- Finding: member-refresh composes with member-adding - a strictly better snapshot from the
+  same run pays (unlike the retired multi-snapshot co-ensembling, which kept the stale one
+  alongside). The l6-cos-EMA run is still on a steep climb.
+- Status: l6-cos-EMA (PID 1134787) epoch 44, new greedy val-best **4.97% / 62.25%** - the
+  <=4.90% refresh trigger is one epoch's progress away; seed2 (PID 1182605) epoch 31, greedy
+  val-best **5.93% / 58.09%** - its <=6.00% 5th-member trigger has fired.
+- Next gates reference 4.40% validation CER and 4.03% test CER. Triggers: l6-cos-EMA greedy
+  val-best <= 4.90% -> refresh the 4th member again and re-gate; seed2 -> screen as 5th
+  member on validation first (seed-diversity axis, never tested).
 - Verdict: positive; new best recorded.
