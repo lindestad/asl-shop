@@ -838,3 +838,42 @@ pass. Update "Current best" in place when a run beats it.
   <= 5.21%, l6-cos-EMA greedy <= 5.55%).
 - Verdict: negative; retire input-space rotation TTA as an ensemble lever -
   diversity must come from weights (new members), not inputs.
+
+### 2026-10-22 — train-split 4-gram LM shallow fusion of ens3: greedy subset degrades monotonically in lambda (4.90% -> 5.01/5.18/5.45%); gate not earned, no test, best unchanged
+
+- Idea: harvest triggers not fired (cos-EMA greedy val-best still epoch 62 at 5.51%
+  through epoch ~136/150; l6-cos-EMA epoch 14 greedy 6.53%, trigger <=5.55% not hit;
+  seed2 epoch ~7/100) and `gpu_budget.sh 6144` failed (2,553 MiB free, three training
+  jobs active), so evaluation-only experiment. Rule 7 allows language correction when
+  the entry names it: named experiment **character n-gram LM shallow fusion** -
+  Witten-Bell interpolated order-4 LM over characters, counts from the 126,131
+  train-split reference texts only (test strings share zero exact strings with train,
+  so this is an orthographic prior, not a test dictionary), log-probs added with
+  weight lambda to the fused ens3 per-step log-posteriors including the EOS class;
+  members/beam 8/fusion unchanged.
+- Code: `--lm-weight/--lm-order` in `scripts/beam_eval_openfs_recognizer.py`
+  (default 0 = exact old behaviour). Fixed an unseen-context backoff bug (gamma 0 not
+  1) before any eval; all table rows sum to 1. Sanity: lm-weight 0 on the 32-clip
+  ens3 smoke reproduced the recorded baseline byte-identical (0.0599078341 / 20 exact).
+- Selection (greedy, first 4,000 validation clips, 69,783 chars; lambda=0 identity
+  matched the member-weight grid's 4.904% baseline): lambda 0.1 **5.014%** (3,499
+  errors), 0.2 **5.176%** (3,612), 0.4 **5.454%** (3,806) vs baseline **4.904%**
+  (3,422) - strict monotonic degradation; the optimum sits at the lambda=0 boundary,
+  so smaller lambdas only interpolate toward it. A beam-8 smoke at lambda=1.0 (32
+  clips) degraded 39 -> 80 errors, confirming the direction.
+- Decision: no full-validation beam-8 run launched; the 4.65% gate is unreachable at
+  any lambda > 0; no test pass.
+- Cost: 4 greedy subset runs 519-575 s each, ~290 MiB peak LM table + <550 MiB total
+  (nice -n 19, shared GPU). A first background launch died with its parent shell -
+  relaunched with setsid.
+- Finding: the recogniser has already internalised the train-text character
+  statistics (same texts are its training targets), so a train-text n-gram prior is
+  redundant on top of its posteriors and actively harmful on the test split's
+  disjoint proper nouns (over-correction toward train-set orthography). Rule 7
+  language-correction axis now tested and retired; ensemble-membership diversity
+  (l6-cos-EMA, seed2 in flight) remains the only open lever.
+- Status: cos-EMA (PID 670605) ~epoch 136/150; l6-cos-EMA (PID 1134787) ~epoch 15/150
+  (epoch 14 greedy 6.53%); seed2 (PID 1182605) ~epoch 7/100. Gates unchanged:
+  4.65% val / 4.20% test; triggers unchanged (cos-EMA greedy <= 5.21%, l6-cos-EMA
+  greedy <= 5.55%).
+- Verdict: negative on the primary metric; retire LM shallow fusion.

@@ -1,7 +1,8 @@
 """Beam-search decode of a trained offline OpenFS recogniser: same contract, weights and
 Levenshtein harness as evaluate() in train_openfs_recognizer, only the AR inference changes
 (batched beam search, sum of log-probabilities optionally divided by generated-length**alpha
-via --length-penalty, 0 = plain sum, no dictionary or language correction).  Hypotheses retire
+via --length-penalty, 0 = plain sum, no dictionary or language correction unless --lm-weight > 0
+adds a train-split character n-gram shallow-fusion, named explicitly).  Hypotheses retire
 on EOS and duplicate prefixes keep their best score.  With --tta-rot-degrees, each checkpoint
 additionally decodes the pose timeline rotated by the listed angles (train-time affine branch,
 deterministic) and all model x rotation frame log-posteriors are fused geometrically.
@@ -25,7 +26,7 @@ from torch.nn import functional as F
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from model.neural import CONTRACT
+from model.neural import CONTRACT,VOCAB
 from model.offline_recognizer import BOS,EOS,PAD_CHAR,PAD_SEG,Recognizer,decode_text
 from scripts.train_neural import edit_distance
 from scripts.train_openfs_recognizer import batches,read_data,summarize
@@ -48,8 +49,68 @@ def rotate_pose(pose,segments,degrees):
     return torch.where(mask,rotated,pose)
 
 
+def build_ngram_lm(texts, order, device):
+    """Witten-Bell interpolated character n-gram log-probability table over the recogniser
+    character vocabulary, built from TRAIN-split reference texts only.  Context states are the
+    character indices 1..V-1 plus a start boundary V; output classes are the same characters
+    plus an end class V (the model's EOS "").  Contexts are coded most-recent-first with the
+    boundary padding short strings, matching context_codes() below."""
+    V = len(VOCAB)
+    K = V + 1
+    E = V + 1
+    counts = [dict() for _ in range(order + 1)]
+    for text in texts:
+        sequence = [VOCAB.index(character) for character in text] + [V]
+        for level in range(1, order + 1):
+            table = counts[level]
+            for position, token in enumerate(sequence):
+                context = 0
+                for offset in range(level - 1):
+                    index = position - 1 - offset
+                    context = context * K + (sequence[index] if index >= 0 else V)
+                bucket = table.get(context)
+                if bucket is None:
+                    bucket = table[context] = {}
+                bucket[token] = bucket.get(token, 0) + 1
+    probs = torch.full((E,), 1.0 / E, dtype=torch.float64)
+    for level in range(1, order + 1):
+        contexts = torch.zeros((K ** (level - 1), E), dtype=torch.float64)
+        for context, bucket in counts[level].items():
+            for token, count in bucket.items():
+                contexts[context, token] = count
+        rows = contexts.sum(dim=1)
+        unique = (contexts > 0).sum(dim=1)
+        gamma = torch.where(rows > 0, rows / (rows + unique), torch.zeros_like(rows))
+        smoothed = torch.where(rows.unsqueeze(1) > 0,
+                               contexts / rows.clamp_min(1.0).unsqueeze(1),
+                               torch.zeros_like(contexts))
+        if level == 1:
+            backoff = probs.unsqueeze(0)
+        else:
+            backoff = probs[(torch.arange(K ** (level - 1)) // K)]
+        probs = gamma.unsqueeze(1) * smoothed + (1.0 - gamma).unsqueeze(1) * backoff
+    return probs.log().reshape(-1).to(device=device, dtype=torch.float32)
+
+
+def context_codes(prefixes, order, device):
+    """Most-recent-first flat context code (base K = len(VOCAB)+1) of the last order-1 tokens of
+    each prefix row; BOS/PAD/EOS slots become the start boundary state V."""
+    K = len(VOCAB) + 1
+    length = prefixes.shape[1]
+    codes = torch.zeros(prefixes.shape[0], dtype=torch.long, device=device)
+    for offset in range(order - 1):
+        column = length - 1 - offset
+        if column < 0:
+            values = torch.full((prefixes.shape[0],), K - 1, dtype=torch.long, device=device)
+        else:
+            values = prefixes[:, column]
+            values = torch.where((values >= 1) & (values <= K - 2), values, K - 1)
+        codes = codes * K + values
+    return codes
+
+
 @torch.inference_mode()
-def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penalty=0.0,weights=None,fusion='logprob',rotations=(0.0,)):
+def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penalty=0.0,weights=None,fusion='logprob',rotations=(0.0,),lm=None):
     n=len(poses)
     pose_variants=[rotate_pose(poses,segments,degrees) for degrees in rotations]
     encoded=[[(memory.repeat_interleave(beam_size,dim=0),padding.repeat_interleave(beam_size,dim=0))
@@ -80,6 +141,14 @@ def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penal
         logp=(logp/(sum(weights)*len(rotations))).view(n,beam_size,-1)
         if fusion=='prob':
             logp=logp.clamp_min(1e-12).log()
+        if lm is not None:
+            lm_table,lm_weight,lm_order=lm
+            E=len(VOCAB)+1
+            codes=context_codes(prefixes,lm_order,device)
+            tokens=torch.arange(logp.shape[-1],device=device)
+            tokens=torch.where(tokens==0,E-1,tokens)
+            lm_row=lm_table[(codes.unsqueeze(1)*E+tokens).reshape(-1)].view(n,beam_size,-1)
+            logp=logp+lm_weight*lm_row
         candidate=(scores.unsqueeze(-1)+logp.masked_fill(~active.unsqueeze(-1),-float('inf'))).flatten(1)
         top,indices=torch.topk(candidate,beam_size,dim=-1)
         vocab=candidate.shape[-1]//beam_size
@@ -139,6 +208,11 @@ def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penal
             break
     outputs=[]
     prefix_rows=prefixes.tolist()
+    end_lm=None
+    if lm is not None:
+        lm_table,lm_weight,lm_order=lm
+        E=len(VOCAB)+1
+        end_lm=(lm_weight*lm_table[context_codes(prefixes,lm_order,device)*E+(E-1)]).view(n,beam_size).tolist()
     for i in range(n):
         completed_length=int(completed_lengths[i])
         if length_penalty:
@@ -158,6 +232,8 @@ def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penal
                 candidate_score=score_rows[j]/float(max(len(prefix)-1,1))**length_penalty
             else:
                 candidate_score=score_rows[j]
+            if end_lm is not None:
+                candidate_score+=end_lm[i][j]
             if candidate_score>best_score:
                 best_score=candidate_score
                 best=tuple(prefix[1:])
@@ -166,7 +242,7 @@ def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penal
 
 
 @torch.inference_mode()
-def score(models,data,representation,beam_size,max_chars,batch_size,device,split,limit,length_penalty=0.0,weights=None,fusion='logprob',rotations=(0.0,)):
+def score(models,data,representation,beam_size,max_chars,batch_size,device,split,limit,length_penalty=0.0,weights=None,fusion='logprob',rotations=(0.0,),lm=None,lm_description=None):
     for model in models:
         model.eval()
     started=time.perf_counter()
@@ -174,7 +250,7 @@ def score(models,data,representation,beam_size,max_chars,batch_size,device,split
     examples=[]
     for batch in batches(data,batch_size,representation,limit=limit):
         poses,segments,positions,_,selected=batch
-        decoded=beam_decode(models,poses.to(device),segments.to(device),positions.to(device),beam_size,max_chars,length_penalty,weights,fusion,rotations)
+        decoded=beam_decode(models,poses.to(device),segments.to(device),positions.to(device),beam_size,max_chars,length_penalty,weights,fusion,rotations,lm)
         for i,index in enumerate(selected):
             row=data['clips'][index]
             actual=decode_text(decoded[i])
@@ -186,7 +262,7 @@ def score(models,data,representation,beam_size,max_chars,batch_size,device,split
                 examples.append(dict(name=row['name'],truth=row['text'],prediction=actual))
     metrics=summarize(stats.pop('overall'))
     metrics.update(split=split,per_signer={k:summarize(v) for k,v in stats.items()},examples=examples,
-                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; ensemble of {len(models)} checkpoints ({"arithmetic mean of frame probabilities" if fusion=="prob" else "weighted mean of log-posteriors"}, weights {weights}); input rotations {list(rotations)}; no dictionary or language correction',
+                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; ensemble of {len(models)} checkpoints ({"arithmetic mean of frame probabilities" if fusion=="prob" else "weighted mean of log-posteriors"}, weights {weights}); input rotations {list(rotations)}; {lm_description if lm_description else "no dictionary or language correction"}',
                    seconds=round(time.perf_counter()-started,3))
     return metrics
 
@@ -204,6 +280,8 @@ def main():
     p.add_argument('--ensemble-weights',type=float,nargs='+',help='per-checkpoint weights for the mean of frame log-posteriors (default: all 1)')
     p.add_argument('--fusion',choices=['logprob','prob'],default='logprob',help='ensemble fusion rule: logprob = weighted mean of frame log-posteriors (geometric); prob = weighted arithmetic mean of frame probabilities, then log')
     p.add_argument('--tta-rot-degrees',type=float,nargs='+',default=[0.0],help='deterministic input-rotation ensemble: decode with the pose timeline rotated by each degree value and fuse all model x rotation frame log-posteriors with the ensemble weights; a single 0.0 reproduces the identity-only behaviour')
+    p.add_argument('--lm-weight',type=float,default=0.0,help='shallow-fusion weight lambda of a Witten-Bell character n-gram language model trained on the TRAIN split reference texts; the LM log-probability is added to the fused model log-posteriors at every beam step (including EOS); 0.0 disables the LM and reproduces the no-language-model behaviour exactly')
+    p.add_argument('--lm-order',type=int,default=4,help='character n-gram order for --lm-weight')
     p.add_argument('--output',type=Path,required=True,help='report stem; never loads or writes a checkpoint')
     p.add_argument('--device',default='cuda')
     args=p.parse_args()
@@ -228,9 +306,17 @@ def main():
         model.load_state_dict(payload['state_dict'],strict=True)
         models.append(model)
     parameters=sum(q.numel() for model in models for q in model.parameters())
+    lm=None
+    lm_description=None
+    if args.lm_weight:
+        train_texts=[row['text'] for row in read_data(args.data,'train')['clips']]
+        lm=(build_ngram_lm(train_texts,args.lm_order,args.device),args.lm_weight,args.lm_order)
+        lm_description=(f'character {args.lm_order}-gram Witten-Bell interpolated LM built from the '
+                        f'{len(train_texts)} train-split reference texts, shallow-fused with weight {args.lm_weight}')
     print(json.dumps(dict(task='recognizer',mode='beam-eval',representation=representation,
                           parameters=parameters,ensemble_size=len(models),ensemble_weights=weights,beam_size=args.beam_size,length_penalty=args.length_penalty,fusion=args.fusion,
                           tta_rot_degrees=args.tta_rot_degrees,
+                          lm_weight=args.lm_weight,lm_order=args.lm_order,
                           ensemble_architectures=architectures,
                           torch=torch.__version__,device=args.device,
                           gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None)),flush=True)
@@ -238,7 +324,7 @@ def main():
         raise ValueError('--tta-rot-degrees currently supports only --fusion logprob.')
     evaluations=[score(models,read_data(args.data,name),representation,args.beam_size,max_chars,
                        args.batch_size,args.device,name,args.limit,args.length_penalty,weights,args.fusion,
-                       tuple(args.tta_rot_degrees)) for name in args.splits]
+                       tuple(args.tta_rot_degrees),lm,lm_description) for name in args.splits]
     for metrics in evaluations:
         print(json.dumps({key:metrics[key] for key in ('split','cer','letter_accuracy','exact_sequence_accuracy',
                                                         'clips','characters','errors','exact','seconds')}),flush=True)
@@ -246,6 +332,7 @@ def main():
     report=dict(task='recognizer',mode='beam-eval',representation=representation,parameters=parameters,
                 ensemble_size=len(models),ensemble_weights=weights,beam_size=args.beam_size,length_penalty=args.length_penalty,fusion=args.fusion,max_chars=max_chars,
                 tta_rot_degrees=args.tta_rot_degrees,
+                lm_weight=args.lm_weight,lm_order=args.lm_order,
                 checkpoints=[str(path.resolve()) for path in args.checkpoint],
                 evaluations=evaluations,dataset=json.loads((args.data/'dataset.json').read_text()),
                 torch=torch.__version__,peak_vram_mib=round(peak/2**20),
