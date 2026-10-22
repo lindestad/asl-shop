@@ -674,3 +674,35 @@ pass. Update "Current best" in place when a run beats it.
 - Next gates reference 4.65% validation CER and 4.20% test CER. Next trigger: either
   run's greedy val-best materially improves (cos-EMA <= 5.21% or layers6 <= 5.55%).
 - Verdict: positive; new best recorded.
+
+### 2026-10-21 — ensemble member weighting (6-layer weight 1.25): 4.67% val CER; gate not passed; best unchanged
+
+- Idea: harvest triggers not fired (cos-EMA greedy val-best still epoch 62 at 5.51%
+  through epoch 113/150; layers6 finished 100/100 with best epoch 82 at 5.85%) and
+  `gpu_budget.sh 6144` failed (1,879 MiB free), so evaluation-only experiment. Ensembles
+  had only ever been tried with equal member weights; the cross-arch finding "the weaker
+  6-layer member still helps" motivates explicit member weights (per-checkpoint
+  temperature on log-posteriors). Named experiment: **ensemble member weighting** -
+  grid the 6-layer member weight w in {0.5, 0.75, 1.0, 1.25, 1.5}, 3-layer members
+  fixed at 1, beam 8 otherwise unchanged, no dictionary or language correction.
+- Code: `scripts/beam_eval_openfs_recognizer.py` gains `--ensemble-weights` (one weight
+  per checkpoint; weighted mean of frame log-posteriors). Sanity: all-ones weights
+  reproduced the pre-edit 32-clip 3-member smoke byte-identical (0.0599078 / 20 exact).
+- Coarse selection (greedy, first 4,000 validation clips, 69,783 chars): w=0.5 4.910 /
+  w=0.75 4.922 / w=1.0 4.904 / w=1.25 4.877 / w=1.5 4.879 -> argmax 1.25, but the edge
+  over equal weights is ~0.03 pp, within subset noise.
+- Validation (12,015 clips, beam 8, weights 1 1 1.25): **4.67% CER** (9,902 errors) /
+  **64.55% exact** (7,756) vs the 4.65% / 64.67% equal-weight gate - not earned; test
+  skipped.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens3-e62-s84-l6e82-w125.beam-eval-report.json`
+- Cost: grid 5 x ~400 s (greedy, batch 8, ~500 MiB); validation 3,536 s / 725 MiB peak
+  (batch 8, nice -n 19, shared GPU).
+- Finding: member-weighting is exhausted - equal log-posterior averaging is already at
+  the optimum for this member set, and the greedy-subset ordering did not transfer to
+  full-val beam 8 (third such selection flip). Do not reweight existing members; further
+  ensemble gains need new diverse members (e.g. a second independent 6-layer recipe)
+  once GPU capacity frees.
+- Status: layers6 run finished (epoch 100/100, best epoch 82 at 5.85%, no newer
+  checkpoint to harvest); cos-EMA (PID 670605) epoch ~113/150, best epoch 62 (5.51%).
+  Gates unchanged: 4.65% val / 4.20% test; next trigger cos-EMA greedy val-best <= 5.21%.
+- Verdict: negative on the primary metric; retire member-weight tuning.
