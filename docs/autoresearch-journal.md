@@ -736,3 +736,38 @@ pass. Update "Current best" in place when a run beats it.
   <= 5.55% (beats l6-e82's 5.85% greedy) -> snapshot, beam-8 validation gate vs
   4.65%, and re-ensemble as 4th member only if it beats ens3 on validation.
 - Verdict: pending; run in progress.
+
+### 2026-10-22 — prob-space ensemble fusion (arithmetic mean of probabilities): 4.61% val / 4.30% test CER; val edge flipped on test; best unchanged
+
+- Idea: harvest triggers not fired (cos-EMA greedy val-best still epoch 62 at 5.51%
+  through epoch 123/150; l6-cos-EMA run at epoch ~7, greedy 9.99%) and
+  `gpu_budget.sh 6144` failed (4,225 MiB free; two training jobs active), so
+  evaluation-only experiment. Member set and weights are retired levers but the
+  fusion rule was never varied: all ensembling so far is the geometric mean of
+  per-frame posteriors (mean of log-posteriors). Named experiment: **prob-space
+  fusion** - weighted arithmetic mean of per-frame softmax probabilities, then log,
+  same 3-member ens3 (e62 + step-84 + l6-e82), beam 8, no dictionary/language
+  correction.
+- Code: `--fusion {logprob,prob}` in `scripts/beam_eval_openfs_recognizer.py`
+  (default `logprob` = exact old behaviour). Sanity: default-fusion 32-clip smoke
+  reproduced the recorded 3-member smoke byte-identical (0.0599078 / 20 exact).
+- Validation (12,015 clips, beam 8): **4.61% CER** (9,783 errors) / **64.67%
+  exact** (7,770) vs log-fusion gate 4.65% (9,856) / 64.67% - 73 fewer errors,
+  identical exact count; gate nominally earned; test pass taken.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens3-e62-s84-l6e82-probfusion.beam-eval-report.json`
+- Test (12,521 clips, beam 8): **4.30% CER** (9,506 errors) / **68.55% exact**
+  (8,583) - worse than the 4.20% / 68.69% best on both metrics; fourth
+  validation/test sign flip; best unchanged.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens3-e62-s84-l6e82-probfusion.beam-eval-report.json`
+- Cost: smoke 2 x ~15 s / 491 MiB; validation 4,066 s / 726 MiB; test 4,209 s /
+  628 MiB (batch 8, nice -n 19, shared GPU).
+- Finding: fusion-rule axis exhausted - log-space geometric averaging is already
+  the better operating point (prob-space averaging over-weights whichever member is
+  most confident per frame); the 0.04 pp val gain is noise-level and flipped sign
+  on test as all prior sub-0.05 pp val deltas have. Keep geometric fusion; further
+  gains need new members (l6-cos-EMA in flight).
+- Status: cos-EMA (PID 670605) epoch ~123/150, val-best epoch 62; l6-cos-EMA
+  (PID 1134787) epoch ~7/150, greedy 9.99% at epoch 6, ETA ~35+ h. Gates unchanged:
+  4.65% val / 4.20% test; triggers unchanged: cos-EMA greedy <= 5.21% or
+  l6-cos-EMA greedy <= 5.55%.
+- Verdict: negative on the primary metric; retire ensemble fusion-rule tuning.

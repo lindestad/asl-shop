@@ -30,7 +30,7 @@ from scripts.train_openfs_recognizer import batches,read_data,summarize
 
 
 @torch.inference_mode()
-def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penalty=0.0,weights=None):
+def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penalty=0.0,weights=None,fusion='logprob'):
     n=len(poses)
     encoded=[(memory.repeat_interleave(beam_size,dim=0),padding.repeat_interleave(beam_size,dim=0))
              for memory,padding in (model.encode(poses,segments,positions) for model in models)]
@@ -50,8 +50,14 @@ def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penal
         for weight,(model,(step_memory,step_padding)) in zip(weights,zip(models,encoded)):
             logits,_=model.decode(step_memory,step_padding,prefixes)
             model_logp=F.log_softmax(logits[:,-1].float(),dim=-1)
-            logp=weight*model_logp if logp is None else logp+weight*model_logp
+            if fusion=='prob':
+                model_term=weight*model_logp.exp()
+                logp=model_term if logp is None else logp+model_term
+            else:
+                logp=weight*model_logp if logp is None else logp+weight*model_logp
         logp=(logp/sum(weights)).view(n,beam_size,-1)
+        if fusion=='prob':
+            logp=logp.clamp_min(1e-12).log()
         candidate=(scores.unsqueeze(-1)+logp.masked_fill(~active.unsqueeze(-1),-float('inf'))).flatten(1)
         top,indices=torch.topk(candidate,beam_size,dim=-1)
         vocab=candidate.shape[-1]//beam_size
@@ -138,7 +144,7 @@ def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penal
 
 
 @torch.inference_mode()
-def score(models,data,representation,beam_size,max_chars,batch_size,device,split,limit,length_penalty=0.0,weights=None):
+def score(models,data,representation,beam_size,max_chars,batch_size,device,split,limit,length_penalty=0.0,weights=None,fusion='logprob'):
     for model in models:
         model.eval()
     started=time.perf_counter()
@@ -146,7 +152,7 @@ def score(models,data,representation,beam_size,max_chars,batch_size,device,split
     examples=[]
     for batch in batches(data,batch_size,representation,limit=limit):
         poses,segments,positions,_,selected=batch
-        decoded=beam_decode(models,poses.to(device),segments.to(device),positions.to(device),beam_size,max_chars,length_penalty,weights)
+        decoded=beam_decode(models,poses.to(device),segments.to(device),positions.to(device),beam_size,max_chars,length_penalty,weights,fusion)
         for i,index in enumerate(selected):
             row=data['clips'][index]
             actual=decode_text(decoded[i])
@@ -158,7 +164,7 @@ def score(models,data,representation,beam_size,max_chars,batch_size,device,split
                 examples.append(dict(name=row['name'],truth=row['text'],prediction=actual))
     metrics=summarize(stats.pop('overall'))
     metrics.update(split=split,per_signer={k:summarize(v) for k,v in stats.items()},examples=examples,
-                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; ensemble of {len(models)} checkpoints (weighted mean of log-posteriors, weights {weights}); no dictionary or language correction',
+                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; ensemble of {len(models)} checkpoints ({"arithmetic mean of frame probabilities" if fusion=="prob" else "weighted mean of log-posteriors"}, weights {weights}); no dictionary or language correction',
                    seconds=round(time.perf_counter()-started,3))
     return metrics
 
@@ -174,6 +180,7 @@ def main():
     p.add_argument('--max-chars',type=int,help='defaults to the checkpoint max_decode (48)')
     p.add_argument('--length-penalty',type=float,default=0.0,help='divide log-probability scores by generated-length**alpha when ranking hypotheses of different lengths; 0 reproduces plain sum-of-log-probabilities')
     p.add_argument('--ensemble-weights',type=float,nargs='+',help='per-checkpoint weights for the mean of frame log-posteriors (default: all 1)')
+    p.add_argument('--fusion',choices=['logprob','prob'],default='logprob',help='ensemble fusion rule: logprob = weighted mean of frame log-posteriors (geometric); prob = weighted arithmetic mean of frame probabilities, then log')
     p.add_argument('--output',type=Path,required=True,help='report stem; never loads or writes a checkpoint')
     p.add_argument('--device',default='cuda')
     args=p.parse_args()
@@ -199,18 +206,18 @@ def main():
         models.append(model)
     parameters=sum(q.numel() for model in models for q in model.parameters())
     print(json.dumps(dict(task='recognizer',mode='beam-eval',representation=representation,
-                          parameters=parameters,ensemble_size=len(models),ensemble_weights=weights,beam_size=args.beam_size,length_penalty=args.length_penalty,
+                          parameters=parameters,ensemble_size=len(models),ensemble_weights=weights,beam_size=args.beam_size,length_penalty=args.length_penalty,fusion=args.fusion,
                           ensemble_architectures=architectures,
                           torch=torch.__version__,device=args.device,
                           gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None)),flush=True)
     evaluations=[score(models,read_data(args.data,name),representation,args.beam_size,max_chars,
-                       args.batch_size,args.device,name,args.limit,args.length_penalty,weights) for name in args.splits]
+                       args.batch_size,args.device,name,args.limit,args.length_penalty,weights,args.fusion) for name in args.splits]
     for metrics in evaluations:
         print(json.dumps({key:metrics[key] for key in ('split','cer','letter_accuracy','exact_sequence_accuracy',
                                                         'clips','characters','errors','exact','seconds')}),flush=True)
     peak=torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
     report=dict(task='recognizer',mode='beam-eval',representation=representation,parameters=parameters,
-                ensemble_size=len(models),ensemble_weights=weights,beam_size=args.beam_size,length_penalty=args.length_penalty,max_chars=max_chars,
+                ensemble_size=len(models),ensemble_weights=weights,beam_size=args.beam_size,length_penalty=args.length_penalty,fusion=args.fusion,max_chars=max_chars,
                 checkpoints=[str(path.resolve()) for path in args.checkpoint],
                 evaluations=evaluations,dataset=json.loads((args.data/'dataset.json').read_text()),
                 torch=torch.__version__,peak_vram_mib=round(peak/2**20),
