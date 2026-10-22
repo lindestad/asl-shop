@@ -803,3 +803,38 @@ pass. Update "Current best" in place when a run beats it.
   reaches the 5.5-6.0% class (e62/l6-e82 class) -> snapshot, re-ensemble as 4th
   member and beam-8 validation gate vs 4.65%; only then test.
 - Verdict: pending; run in progress.
+
+### 2026-10-22 — test-time input-rotation ensembling of ens3: subset selection says dead (±5° −1 error, ±10° worse); no full-val/test run, best unchanged
+
+- Idea: harvest triggers not fired (cos-EMA greedy val-best still epoch 62 at 5.51%
+  through epoch 131/150; l6-cos-EMA epoch ~11/150; seed2 epoch ~3/100) and
+  `gpu_budget.sh 6144` failed (2,655 MiB free, three training jobs active), so
+  evaluation-only experiment. All model-side fusion knobs retired; the untried
+  ensemble axis is the **input**: the same members fed deterministically rotated
+  pose timelines. Named experiment: **test-time input-rotation ensembling** -
+  ens3 (e62 + step-84 + l6-e82) x rotations {0, +5, -5} deg, geometric fusion of
+  all model x rotation frame log-posteriors, beam 8, no dictionary/language
+  correction.
+- Code: `--tta-rot-degrees` in `scripts/beam_eval_openfs_recognizer.py` - the
+  train-time affine branch (pose + trajectory columns about the origin, PAD rows
+  and presence/frame-delta columns untouched) applied deterministically per
+  variant; encoder encodes each variant once, decode steps fuse all terms.
+  Sanity: identity-only smoke reproduced the recorded 3-member 32-clip smoke
+  byte-identical (0.0599078 / 20 exact); ±15° smoke changed predictions
+  (0.06144 / 20), confirming the rotation path is live.
+- Selection (greedy, first 4,000 validation clips, 69,783 chars - same clip set
+  as the member-weight grid, whose identity baseline was 4.904%):
+  {0,±5} **4.902%** (3,421 errors, 2,634 exact) = 1 error better than baseline;
+  {0,±10} **4.930%** (3,440 errors, 2,631 exact). VRAM 701 MiB at batch 8.
+- Decision: deltas are noise-level (~1 error on 69,783 chars) and stronger
+  rotation hurts - mild in-plane rotation barely moves the already-confident
+  fused posterior. No full validation beam-8 run launched (~3x cost, ~4,000 s),
+  gate 4.65% untouched; no test pass.
+- Cost: 2 smoke runs ~15-45 s / 701 MiB; two 4,000-clip greedy subsets 910 s +
+  ~900 s / ~700 MiB (nice -n 19, shared GPU).
+- Status at harvest: cos-EMA (PID 670605) epoch ~131/150, val-best epoch 62;
+  l6-cos-EMA (PID 1134787) epoch ~11/150; seed2 (PID 1182605) epoch ~3/100.
+  Gates unchanged: 4.65% val / 4.20% test; triggers unchanged (cos-EMA greedy
+  <= 5.21%, l6-cos-EMA greedy <= 5.55%).
+- Verdict: negative; retire input-space rotation TTA as an ensemble lever -
+  diversity must come from weights (new members), not inputs.

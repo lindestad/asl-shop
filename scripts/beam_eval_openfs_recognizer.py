@@ -2,7 +2,9 @@
 Levenshtein harness as evaluate() in train_openfs_recognizer, only the AR inference changes
 (batched beam search, sum of log-probabilities optionally divided by generated-length**alpha
 via --length-penalty, 0 = plain sum, no dictionary or language correction).  Hypotheses retire
-on EOS and duplicate prefixes keep their best score.
+on EOS and duplicate prefixes keep their best score.  With --tta-rot-degrees, each checkpoint
+additionally decodes the pose timeline rotated by the listed angles (train-time affine branch,
+deterministic) and all model x rotation frame log-posteriors are fused geometrically.
 
   python scripts/beam_eval_openfs_recognizer.py --checkpoint <recognizer.pt> --data data/openfs-packed \
       --splits validation --beam-size 8 --output <stem>   # writes <stem>.beam-eval-report.json
@@ -24,17 +26,36 @@ from torch.nn import functional as F
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from model.neural import CONTRACT
-from model.offline_recognizer import BOS,EOS,PAD_CHAR,Recognizer,decode_text
+from model.offline_recognizer import BOS,EOS,PAD_CHAR,PAD_SEG,Recognizer,decode_text
 from scripts.train_neural import edit_distance
 from scripts.train_openfs_recognizer import batches,read_data,summarize
 
 
+def rotate_pose(pose,segments,degrees):
+    """Train-time affine branch (scripts.train_openfs_recognizer.augment_timeline) evaluated
+    deterministically at inference: rotate pose and trajectory columns about the origin by
+    `degrees`, leaving presence flags, frame deltas and PAD_POSE rows untouched."""
+    angle=math.radians(degrees)
+    matrix=torch.tensor([[math.cos(angle),-math.sin(angle)],[math.sin(angle),math.cos(angle)]],
+                        dtype=pose.dtype,device=pose.device)
+    rotated=pose.clone()
+    for base in (0,45):
+        hand=rotated[:,:,base:base+42].reshape(rotated.shape[0],rotated.shape[1],21,2)@matrix
+        rotated[:,:,base:base+42]=hand.reshape(rotated.shape[0],rotated.shape[1],42)
+    rotated[:,:,42:44]=rotated[:,:,42:44]@matrix
+    rotated[:,:,87:89]=rotated[:,:,87:89]@matrix
+    mask=(segments!=PAD_SEG).unsqueeze(-1)
+    return torch.where(mask,rotated,pose)
+
+
 @torch.inference_mode()
-def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penalty=0.0,weights=None,fusion='logprob'):
+def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penalty=0.0,weights=None,fusion='logprob',rotations=(0.0,)):
     n=len(poses)
-    encoded=[(memory.repeat_interleave(beam_size,dim=0),padding.repeat_interleave(beam_size,dim=0))
-             for memory,padding in (model.encode(poses,segments,positions) for model in models)]
-    device=encoded[0][0].device
+    pose_variants=[rotate_pose(poses,segments,degrees) for degrees in rotations]
+    encoded=[[(memory.repeat_interleave(beam_size,dim=0),padding.repeat_interleave(beam_size,dim=0))
+              for memory,padding in (model.encode(variant,segments,positions) for variant in pose_variants)]
+             for model in models]
+    device=encoded[0][0][0].device
     samples=torch.arange(n,device=device).repeat_interleave(beam_size)
     beam_rows=torch.arange(beam_size,device=device)
     prefixes=torch.full((n*beam_size,1),BOS,dtype=torch.long,device=device)
@@ -47,15 +68,16 @@ def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penal
     for _ in range(max_chars):
         length=prefixes.shape[1]
         logp=None
-        for weight,(model,(step_memory,step_padding)) in zip(weights,zip(models,encoded)):
-            logits,_=model.decode(step_memory,step_padding,prefixes)
-            model_logp=F.log_softmax(logits[:,-1].float(),dim=-1)
-            if fusion=='prob':
-                model_term=weight*model_logp.exp()
-                logp=model_term if logp is None else logp+model_term
-            else:
-                logp=weight*model_logp if logp is None else logp+weight*model_logp
-        logp=(logp/sum(weights)).view(n,beam_size,-1)
+        for weight,(model,encodings) in zip(weights,zip(models,encoded)):
+            for step_memory,step_padding in encodings:
+                logits,_=model.decode(step_memory,step_padding,prefixes)
+                model_logp=F.log_softmax(logits[:,-1].float(),dim=-1)
+                if fusion=='prob':
+                    model_term=weight*model_logp.exp()
+                    logp=model_term if logp is None else logp+model_term
+                else:
+                    logp=weight*model_logp if logp is None else logp+weight*model_logp
+        logp=(logp/(sum(weights)*len(rotations))).view(n,beam_size,-1)
         if fusion=='prob':
             logp=logp.clamp_min(1e-12).log()
         candidate=(scores.unsqueeze(-1)+logp.masked_fill(~active.unsqueeze(-1),-float('inf'))).flatten(1)
@@ -144,7 +166,7 @@ def beam_decode(models,poses,segments,positions,beam_size,max_chars,length_penal
 
 
 @torch.inference_mode()
-def score(models,data,representation,beam_size,max_chars,batch_size,device,split,limit,length_penalty=0.0,weights=None,fusion='logprob'):
+def score(models,data,representation,beam_size,max_chars,batch_size,device,split,limit,length_penalty=0.0,weights=None,fusion='logprob',rotations=(0.0,)):
     for model in models:
         model.eval()
     started=time.perf_counter()
@@ -152,7 +174,7 @@ def score(models,data,representation,beam_size,max_chars,batch_size,device,split
     examples=[]
     for batch in batches(data,batch_size,representation,limit=limit):
         poses,segments,positions,_,selected=batch
-        decoded=beam_decode(models,poses.to(device),segments.to(device),positions.to(device),beam_size,max_chars,length_penalty,weights,fusion)
+        decoded=beam_decode(models,poses.to(device),segments.to(device),positions.to(device),beam_size,max_chars,length_penalty,weights,fusion,rotations)
         for i,index in enumerate(selected):
             row=data['clips'][index]
             actual=decode_text(decoded[i])
@@ -164,7 +186,7 @@ def score(models,data,representation,beam_size,max_chars,batch_size,device,split
                 examples.append(dict(name=row['name'],truth=row['text'],prediction=actual))
     metrics=summarize(stats.pop('overall'))
     metrics.update(split=split,per_signer={k:summarize(v) for k,v in stats.items()},examples=examples,
-                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; ensemble of {len(models)} checkpoints ({"arithmetic mean of frame probabilities" if fusion=="prob" else "weighted mean of log-posteriors"}, weights {weights}); no dictionary or language correction',
+                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; ensemble of {len(models)} checkpoints ({"arithmetic mean of frame probabilities" if fusion=="prob" else "weighted mean of log-posteriors"}, weights {weights}); input rotations {list(rotations)}; no dictionary or language correction',
                    seconds=round(time.perf_counter()-started,3))
     return metrics
 
@@ -181,6 +203,7 @@ def main():
     p.add_argument('--length-penalty',type=float,default=0.0,help='divide log-probability scores by generated-length**alpha when ranking hypotheses of different lengths; 0 reproduces plain sum-of-log-probabilities')
     p.add_argument('--ensemble-weights',type=float,nargs='+',help='per-checkpoint weights for the mean of frame log-posteriors (default: all 1)')
     p.add_argument('--fusion',choices=['logprob','prob'],default='logprob',help='ensemble fusion rule: logprob = weighted mean of frame log-posteriors (geometric); prob = weighted arithmetic mean of frame probabilities, then log')
+    p.add_argument('--tta-rot-degrees',type=float,nargs='+',default=[0.0],help='deterministic input-rotation ensemble: decode with the pose timeline rotated by each degree value and fuse all model x rotation frame log-posteriors with the ensemble weights; a single 0.0 reproduces the identity-only behaviour')
     p.add_argument('--output',type=Path,required=True,help='report stem; never loads or writes a checkpoint')
     p.add_argument('--device',default='cuda')
     args=p.parse_args()
@@ -207,17 +230,22 @@ def main():
     parameters=sum(q.numel() for model in models for q in model.parameters())
     print(json.dumps(dict(task='recognizer',mode='beam-eval',representation=representation,
                           parameters=parameters,ensemble_size=len(models),ensemble_weights=weights,beam_size=args.beam_size,length_penalty=args.length_penalty,fusion=args.fusion,
+                          tta_rot_degrees=args.tta_rot_degrees,
                           ensemble_architectures=architectures,
                           torch=torch.__version__,device=args.device,
                           gpu=torch.cuda.get_device_name(0) if args.device.startswith('cuda') else None)),flush=True)
+    if args.fusion=='prob' and any(degrees!=0.0 for degrees in args.tta_rot_degrees):
+        raise ValueError('--tta-rot-degrees currently supports only --fusion logprob.')
     evaluations=[score(models,read_data(args.data,name),representation,args.beam_size,max_chars,
-                       args.batch_size,args.device,name,args.limit,args.length_penalty,weights,args.fusion) for name in args.splits]
+                       args.batch_size,args.device,name,args.limit,args.length_penalty,weights,args.fusion,
+                       tuple(args.tta_rot_degrees)) for name in args.splits]
     for metrics in evaluations:
         print(json.dumps({key:metrics[key] for key in ('split','cer','letter_accuracy','exact_sequence_accuracy',
                                                         'clips','characters','errors','exact','seconds')}),flush=True)
     peak=torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
     report=dict(task='recognizer',mode='beam-eval',representation=representation,parameters=parameters,
                 ensemble_size=len(models),ensemble_weights=weights,beam_size=args.beam_size,length_penalty=args.length_penalty,fusion=args.fusion,max_chars=max_chars,
+                tta_rot_degrees=args.tta_rot_degrees,
                 checkpoints=[str(path.resolve()) for path in args.checkpoint],
                 evaluations=evaluations,dataset=json.loads((args.data/'dataset.json').read_text()),
                 torch=torch.__version__,peak_vram_mib=round(peak/2**20),
