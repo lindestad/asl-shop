@@ -8,10 +8,13 @@ pass. Update "Current best" in place when a run beats it.
 
 - four-checkpoint cross-architecture/cross-recipe log-posterior ensemble: cosine+EMA
   epoch-62 and step-schedule epoch-84 full-data gaps transformers (8,828,348 params
-  each) plus 6-layer step-schedule epoch-82 and 6-layer cosine+EMA epoch-37 full-data
+  each) plus 6-layer step-schedule epoch-82 and 6-layer cosine+EMA epoch-54 full-data
   gaps transformers (17,509,820 params each; 52,676,336 total), beam search width 8,
   mean of per-step log-posteriors, no dictionary or language correction:
-  **4.03% CER**, 69.26% exact (12,521 test strings, 22 Oct 2026,
+  **3.96% CER**, 69.50% exact (12,521 test strings, 22 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-l6ce54.beam-eval-report.json`)
+- previous: same ensemble with the 6-layer cosine+EMA epoch-37 member:
+  **4.03% CER**, 69.26% exact (22 Oct 2026,
   `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-l6ce37.beam-eval-report.json`)
 - previous: same ensemble with the 6-layer cosine+EMA epoch-26 member instead of
   epoch-37: **4.14% CER**, 68.71% exact (22 Oct 2026,
@@ -1027,3 +1030,38 @@ pass. Update "Current best" in place when a run beats it.
   Gates unchanged: 4.40% val / 4.03% test. Next iteration: refresh 4th member
   l6ce37 -> newest val-best snapshot and re-gate.
 - Verdict: negative on the primary metric; retire seed-diversity ensembling.
+
+### 2026-10-22 — refreshed 4th ensemble member to l6-cos-EMA epoch-54: **NEW BEST 3.96% CER / 69.50% exact**
+
+- Idea: the standing 4th-member refresh trigger fired - l6-cos-EMA greedy val-best epoch 54
+  hit **4.887% / 62.74%**, below the 4.90% bar (snapshot frozen from the live
+  `recognizer.pt` at 22:54 UTC as `recognizer-epoch54.pt`; run later reached epoch 62,
+  val-best epoch 59 at 4.831% / 62.71%). `gpu_budget.sh 6144` failed (3,991 MiB free),
+  evaluation-only. Named experiment: **4th-member refresh round 2** - ens3 members
+  unchanged (e62 + step-84 + l6-e82), l6ce37 -> l6ce54, equal weights, logprob fusion,
+  beam 8, no dictionary or language correction.
+- Smoke: 4-member 32-clip validation smoke 39 errors / 20 exact (vs 35 / 20 for the e37
+  set - smoke-level noise, full-val gate decides).
+- Validation (12,015 clips, beam 8): **4.36% CER** (9,255 errors) / **65.64% exact**
+  (7,887) vs e37-member gate 4.40% (9,332) / 65.38% - 77 fewer errors, +32 exact; inside
+  the sub-0.05 pp band that produced seven sign flips, but exact also improved and the
+  member's own greedy CER improved 0.22 pp (far above noise), so test pass taken.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-l6ce54.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **3.96% CER** (8,764 errors) / **69.50% exact**
+  (8,702) - new best on both metrics, previous 4.03% / 69.26%; third clean val->test
+  transfer of a member refresh (-0.036 pp val -> -0.071 pp test).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-l6ce54.beam-eval-report.json`
+- Params: unchanged 52,676,336 (member swap, same arch). Cost: smoke 18 s / 608 MiB;
+  validation 5,069 s / 879 MiB; test 5,469 s / 766 MiB (batch 8, nice -n 19, two
+  training jobs sharing the GPU).
+- Finding: the member-refresh lever keeps paying monotonically as the l6-cos-EMA run
+  climbs (5.40 -> 5.11 -> 4.89 greedy member quality tracked to test). A 0.036 pp val
+  edge transferred despite sitting inside the historical flip band - consistent with
+  the rule that a transfer follows the member's own greedy improvement, not the ensemble
+  val delta.
+- Status: l6-cos-EMA (PID 1134787) epoch 62, val-best epoch 59 at **4.831% / 62.71%** and
+  still climbing; seed2 (PID 1182605) epoch ~55, best 5.73% (not carried, retired axis).
+- Next gates reference 4.36% validation CER and 3.96% test CER. Triggers: l6-cos-EMA
+  greedy val-best <= 4.70% or run plateau/finish (150-epoch cap) -> refresh the 4th
+  member to the newest val-best snapshot and re-gate.
+- Verdict: positive; new best recorded.
