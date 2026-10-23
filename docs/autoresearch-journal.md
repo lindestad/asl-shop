@@ -1183,3 +1183,36 @@ pass. Update "Current best" in place when a run beats it.
 - Status: l6-cos-EMA epoch ~78/150 (val-best e59), l9-cos-EMA ~epoch 7; both running.
   Gates unchanged: 4.31% val (soup5459 ens4) / 3.93% test. Triggers unchanged.
 - Verdict: negative; soup-member tuning exhausted.
+
+### 2026-10-23 — cross-recipe weight-space soup of the two 6-layer members: catastrophic barrier (58-82 pp CER), gate not earned, no test, best unchanged
+
+- Idea: trained-run triggers unfired (l6-cos-EMA val-best still e59 4.831%, epochs
+  60-82 all worse, bar <=4.70%; l9-cos-EMA epoch 8, 8.17% CTC far from <=5.55%),
+  `gpu_budget.sh 6144` failed (2,789 free) so evaluation-only. Test the one axis of
+  the working soup lever that the retirement did NOT cover: the retired axes are
+  within-trajectory spacing/weight tuning on the l6ce member, but every soup so far
+  interpolated snapshots of ONE run. Question: does weight averaging connect the two
+  independent 6-layer runs (step-schedule e82, cosine+EMA soup5459 - same arch, same
+  seed 42, same data order, different LR schedule)? If connected, a cross-recipe
+  midpoint would be a genuinely better 6L member, and its recipe pair (m3) is the
+  worse parent on paper.
+- Method: `scripts/soup_openfs_recognizer.py` on m3=l6-step e82 + m4=l6ce-soup5459,
+  alpha 0.25/0.5/0.75 (17,509,820 params each, CPU, seconds); greedy screens on first
+  4,000 validation clips (69,783 chars) beside the existing 4k baselines.
+- Screening: m3 5.801% (4,048) / m4 4.696% (3,277) / a0.25 **75.42%** (52,628) /
+  a0.5 **86.77%** (60,553) / a0.75 **82.58%** (57,623) - a monotone-in-alpha barrier
+  of +70 to +82 pp, i.e. total decode collapse (exact 0.0-0.03%), not noise: the two
+  recipes converge to basins separated by a vast weight-space barrier. Within-run
+  soup worked because EMA snapshots of one schedule share a basin.
+- No member greedy, no validation gate, no test: candidate is 70+ pp worse than the
+  member it would replace; best unchanged at 3.93% CER / 69.76% exact.
+- Cost: 3 soups (CPU); 4 screens, 224-267 s each, 128 MiB each (nice -n 19, two
+  training jobs active); total ~20 min GPU.
+- Finding: retire weight-space averaging beyond a single run's trajectory - soup is
+  trajectory-internal only (and that axis is itself exhausted/ensemble-absorbed).
+  Member supply now depends solely on the two running experiments: l9-cos-EMA
+  (<=5.55% greedy class) and any genuine l6ce val-best <=4.70%.
+- Status: l6-cos-EMA epoch 82/150 (val-best e59 4.831%, trend worsening 4.9-5.1%
+  since e59), l9-cos-EMA epoch 8/100 (val-score 8.17% falling ~0.5-0.9/epoch).
+  Gates unchanged: 4.31% val (soup5459 ens4) / 3.93% test.
+- Verdict: negative; cross-recipe weight averaging retired.
