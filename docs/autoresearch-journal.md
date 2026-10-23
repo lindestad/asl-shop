@@ -1285,6 +1285,44 @@ pass. Update "Current best" in place when a run beats it.
 - Gates unchanged: 4.31% val / 3.93% test. Triggers: l6-cos-EMA greedy val-best
   <=4.70% -> 4th-member refresh; l9-cos-EMA greedy val-best <=5.55% -> 5th-member
   screening; width384 greedy val-best <=5.55% class -> 5th/6th-member candidate
-  screening (beam-8 validation gate vs 4.31%, member-quality bar applies).
+   screening (beam-8 validation gate vs 4.31%, member-quality bar applies).
 - Verdict: pending; run in progress.
+
+### 2026-10-23 — soup upgrade of the m1 member (3L cos-EMA e35+e62 a50): member greedy -0.181 pp but ensemble validation 4.31%/9,149 vs gate 4.31%/9,133; gate not passed, no test, best unchanged
+
+- Idea: harvest triggers not fired (l6-cos-EMA val-best still e59 4.831% through epoch 101;
+  l9-cos-EMA epoch 14 greedy 6.08% > 5.55% bar; width384 epoch 1 warmup) and
+  `gpu_budget.sh 6144` failed (783 MiB free at start), so evaluation-only. The within-run
+  soup lever produced the current best member but had only ever been applied to the l6ce
+  member (already souped) and retired for spacing tuning there. Untested: the soup lever on
+  the one strong member never averaged - m1 (3L cos-EMA e62, greedy 5.51%/61.39%, raw EMA
+  weights). Named experiment: **m1 member soup upgrade** - chord e35+e62 (27-epoch spacing,
+  same run, cosine schedule) as 4-member ens4 with s84 + l6e82 + soup5459 unchanged, beam 8,
+  logprob fusion, equal weights, no dictionary or language correction.
+- Screening (greedy, first 4,000 validation clips, 69,783 chars): e62 5.477 (3,822) /
+  e35 5.805 (4,051) / a25 5.362 (3,742) / a50 **5.311 (3,706, -116 vs best parent)** /
+  a75 5.453 (3,805) - pair optimum alpha 0.5 repeats (same as the 5-spaced m4 pair).
+- Member greedy full validation (12,015 clips): soup-a50 **5.330% CER / 61.81% exact** vs
+  e62's 5.51%/61.39% - a -0.181 pp member upgrade (-382 errors), larger than soup5459's
+  -0.126 pp that transferred;
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-greedy-m1-soup-e35e62-a50.beam-eval-report.json`.
+- Validation (12,015 clips, beam 8, ens4 with m1->soup): **4.31% CER** (9,149 errors) /
+  **66.06% exact** (7,937) vs gate 4.31% (9,133) / 66.01% (7,931) - +16 errors, +6 exact;
+  gate NOT passed; no test pass; best unchanged at 3.93% / 69.76%.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-soupe35e62-s84-l6e82-soup5459.beam-eval-report.json`
+- Params: unchanged 52,676,336 (member swap, same arch). Cost: 5 subset screens 224-580 s /
+  ~130 MiB; member greedy val 945 s / 132 MiB; smoke 20 s / 608 MiB (32 errors / 21 exact vs
+  39 / 20 for the e62 set); validation beam 8 5,688 s / ~880 MiB (batch 8, nice -n 19,
+  shared GPU, three training jobs active).
+- Finding: member-led soup transfer is slot-specific, not universal - the m4 (l6ce) slot
+  transferred four member upgrades, the m1 (3L cos-EMA) slot absorbed a -0.181 pp member
+  gain entirely (+16 ensemble errors). Consistent with the retired seed axis: the 3L
+  cos-EMA slot's information is already covered by the s84+l6ce members, so a better
+  version of m1 is ensemble-invisible. Retire member upgrades within the 3L cos-EMA slot;
+  member supply stays with structurally new l9-cos-EMA and width384 runs.
+- Status: l6-cos-EMA epoch ~101/150 (val-best e59), l9-cos-EMA epoch ~14 (greedy 6.08%,
+  its <=5.55% 5th-member trigger ~2 epochs away), width384 epoch 1 (54.9% warmup). Gates
+  unchanged: 4.31% val (soup5459 ens4) / 3.93% test.
+- Verdict: negative; 3L-cos-EMA-slot member upgrades retired.
+
 
