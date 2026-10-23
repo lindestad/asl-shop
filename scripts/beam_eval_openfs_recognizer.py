@@ -14,6 +14,13 @@ Mixed-representation ensembles are allowed when every checkpoint carries the gap
 timeline (gaps, wrist2d): each model encodes its own representation of the identical clip
 batch (same segments/positions) and all frame log-posteriors fuse as before; `compressed`
 checkpoints use a different timeline and stay single-representation.
+
+Every decode additionally collects the beam hypothesis pool (per-sample record-setting
+EOS retirements plus surviving active prefixes, deduplicated, best score kept) and reports
+two selections in one pass: the historical argmax-score (MAP) output as the primary metric
+and a minimum-Bayes-risk (MBR) output that minimises the expected unit-cost Levenshtein
+distance under the softmax-weighted pool posterior - the selection criterion matches the
+evaluation metric directly.
 """
 import argparse
 from collections import defaultdict
@@ -118,6 +125,38 @@ def context_codes(prefixes, order, device):
     return codes
 
 
+def _clean(ids):
+    """Character-token ids of a hypothesis with BOS/EOS/PAD removed, so completed and
+    still-active hypotheses dedupe on the same key."""
+    return tuple(index for index in ids if index not in (EOS,PAD_CHAR,BOS))
+
+
+def mbr_select(pool):
+    """Minimum-Bayes-risk selection over the hypothesis pool: dedupe by character ids
+    (best score kept), weight each unique hypothesis by softmax(pool scores), and return
+    the ids minimising expected unit-cost Levenshtein distance; ties break to higher score."""
+    unique={}
+    for score_value,ids in pool:
+        if ids not in unique or score_value>unique[ids]:
+            unique[ids]=score_value
+    if not unique:
+        return ()
+    hypotheses=list(unique)
+    scores=[unique[key] for key in hypotheses]
+    top=max(scores)
+    weights=[math.exp(score-top) for score in scores]
+    total=sum(weights)
+    weights=[weight/total for weight in weights]
+    best=0
+    best_cost=None
+    for i,candidate in enumerate(hypotheses):
+        cost=sum(weight*edit_distance(list(candidate),list(other))
+                 for weight,other in zip(weights,hypotheses))
+        if best_cost is None or cost<best_cost-1e-9 or (abs(cost-best_cost)<=1e-9 and scores[i]>scores[best]):
+            best,best_cost=i,cost
+    return hypotheses[best]
+
+
 @torch.inference_mode()
 def beam_decode(models,poses_by_model,segments,positions,beam_size,max_chars,length_penalty=0.0,weights=None,fusion='logprob',rotations=(0.0,),lm=None):
     n=len(poses_by_model[0])
@@ -136,6 +175,7 @@ def beam_decode(models,poses_by_model,segments,positions,beam_size,max_chars,len
     completed_prefixes=torch.full((n,max_chars+1),PAD_CHAR,dtype=torch.long,device=device)
     completed_lengths=torch.zeros(n,dtype=torch.long,device=device)
     finished_norm=torch.full((n,),-float('inf'),device=device) if length_penalty else None
+    pool=[[] for _ in range(n)]
     for _ in range(max_chars):
         length=prefixes.shape[1]
         logp=None
@@ -190,6 +230,9 @@ def beam_decode(models,poses_by_model,segments,positions,beam_size,max_chars,len
             finished_scores[rows]=best_eos_scores[rows]
             if length_penalty:
                 finished_norm[rows]=cand_norm[rows]
+            for sample in rows.tolist():
+                pool[sample].append((float(best_eos_scores[sample]),
+                                     _clean(cand_prefixes[sample*beam_size+int(best_eos[sample]),1:length+1].tolist())))
         active_mask=valid&(token.reshape(n,beam_size)!=EOS)
         new_prefixes=torch.full((n*beam_size,length+1),PAD_CHAR,dtype=torch.long,device=device)
         new_scores=torch.full((n,beam_size),-float('inf'),device=device)
@@ -244,11 +287,12 @@ def beam_decode(models,poses_by_model,segments,positions,beam_size,max_chars,len
                 candidate_score=score_rows[j]
             if end_lm is not None:
                 candidate_score+=end_lm[i][j]
+            pool[i].append((candidate_score,_clean(prefix[1:])))
             if candidate_score>best_score:
                 best_score=candidate_score
                 best=tuple(prefix[1:])
         outputs.append(best if best is not None else ())
-    return outputs
+    return outputs,pool
 
 
 @torch.inference_mode()
@@ -257,6 +301,8 @@ def score(models,data,representations,beam_size,max_chars,batch_size,device,spli
         model.eval()
     started=time.perf_counter()
     stats=defaultdict(lambda:dict(errors=0,characters=0,exact=0,clips=0))
+    mbr_stats=defaultdict(lambda:dict(errors=0,characters=0,exact=0,clips=0))
+    pool_sizes=[]
     examples=[]
     unique=list(dict.fromkeys(representations))
     iterators=[batches(data,batch_size,rep,limit=limit) for rep in unique]
@@ -267,7 +313,7 @@ def score(models,data,representations,beam_size,max_chars,batch_size,device,spli
             if batch[4]!=selected or not torch.equal(batch[1],segments) or not torch.equal(batch[2],positions):
                 raise ValueError('Mixed-representation batches diverged; gap-preserving timelines are not aligned.')
         poses_by_rep={rep:batch[0].to(device) for rep,batch in zip(unique,batch_tuple)}
-        decoded=beam_decode(models,[poses_by_rep[rep] for rep in representations],segments.to(device),positions.to(device),beam_size,max_chars,length_penalty,weights,fusion,rotations,lm)
+        decoded,pools=beam_decode(models,[poses_by_rep[rep] for rep in representations],segments.to(device),positions.to(device),beam_size,max_chars,length_penalty,weights,fusion,rotations,lm)
         for i,index in enumerate(selected):
             row=data['clips'][index]
             actual=decode_text(decoded[i])
@@ -275,11 +321,21 @@ def score(models,data,representations,beam_size,max_chars,batch_size,device,spli
             for key in ('overall',row['signer']):
                 stats[key]['errors']+=error;stats[key]['characters']+=len(row['text'])
                 stats[key]['exact']+=actual==row['text'];stats[key]['clips']+=1
+            mbr_actual=decode_text(mbr_select(pools[i]))
+            mbr_error=edit_distance(row['text'],mbr_actual)
+            for key in ('overall',row['signer']):
+                mbr_stats[key]['errors']+=mbr_error;mbr_stats[key]['characters']+=len(row['text'])
+                mbr_stats[key]['exact']+=mbr_actual==row['text'];mbr_stats[key]['clips']+=1
+            pool_sizes.append(len(set(ids for _,ids in pools[i])))
             if len(examples)<30:
-                examples.append(dict(name=row['name'],truth=row['text'],prediction=actual))
+                examples.append(dict(name=row['name'],truth=row['text'],prediction=actual,mbr_prediction=mbr_actual))
     metrics=summarize(stats.pop('overall'))
-    metrics.update(split=split,per_signer={k:summarize(v) for k,v in stats.items()},examples=examples,
-                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; ensemble of {len(models)} checkpoints over representations {representations} ({"arithmetic mean of frame probabilities" if fusion=="prob" else "weighted mean of log-posteriors"}, weights {weights}); input rotations {list(rotations)}; {lm_description if lm_description else "no dictionary or language correction"}',
+    mbr_metrics=summarize(mbr_stats.pop('overall'))
+    metrics['mbr']=mbr_metrics
+    metrics.update(split=split,per_signer={k:summarize(v) for k,v in stats.items()},
+                   mbr_per_signer={k:summarize(v) for k,v in mbr_stats.items()},
+                   mean_pool_size=round(sum(pool_sizes)/max(len(pool_sizes),1),3),examples=examples,
+                   decoder=f'beam search width {beam_size}; length penalty {length_penalty}; ensemble of {len(models)} checkpoints over representations {representations} ({"arithmetic mean of frame probabilities" if fusion=="prob" else "weighted mean of log-posteriors"}, weights {weights}); input rotations {list(rotations)}; {lm_description if lm_description else "no dictionary or language correction"}; selection: argmax-score (MAP) primary and minimum-Bayes-risk (expected unit-cost Levenshtein under the softmax-weighted beam pool posterior) reported alongside',
                    seconds=round(time.perf_counter()-started,3))
     return metrics
 
@@ -346,6 +402,8 @@ def main():
     for metrics in evaluations:
         print(json.dumps({key:metrics[key] for key in ('split','cer','letter_accuracy','exact_sequence_accuracy',
                                                         'clips','characters','errors','exact','seconds')}),flush=True)
+        mbr=dict(metrics['mbr']);mbr['selection']='mbr'
+        print(json.dumps(mbr),flush=True)
     peak=torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
     report=dict(task='recognizer',mode='beam-eval',representations=representations,parameters=parameters,
                 ensemble_size=len(models),ensemble_weights=weights,beam_size=args.beam_size,length_penalty=args.length_penalty,fusion=args.fusion,max_chars=max_chars,

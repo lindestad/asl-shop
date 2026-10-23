@@ -1216,3 +1216,42 @@ pass. Update "Current best" in place when a run beats it.
   since e59), l9-cos-EMA epoch 8/100 (val-score 8.17% falling ~0.5-0.9/epoch).
   Gates unchanged: 4.31% val (soup5459 ens4) / 3.93% test.
 - Verdict: negative; cross-recipe weight averaging retired.
+
+### 2026-10-23 — minimum-Bayes-risk (expected-Levenshtein) selection over the beam pool: val -71 errors (gate earned) but test +4 errors; eighth val/test flip; best unchanged
+
+- Idea: harvest triggers not fired (l6-cos-EMA greedy val-best still e59 4.831% through
+  epoch 91; l9-cos-EMA epoch 11 at 6.81% greedy, > 5.55% bar) and `gpu_budget.sh 6144`
+  failed (2,789 MiB free), so evaluation-only. Every retired decoder lever kept the
+  selection rule fixed at argmax joint score (MAP); the metric is Levenshtein CER, so the
+  untested axis is the selection criterion itself. Named experiment: **minimum-Bayes-risk
+  (MBR) selection** - collect the beam hypothesis pool per sample (record-setting EOS
+  retirements + surviving active prefixes, deduped, best score kept, mean 5.7 unique),
+  weight unique hypotheses by softmax(pool scores), output the hypothesis minimising
+  expected unit-cost Levenshtein distance. Members (ens4 e62 + step-84 + l6-e82 +
+  soup5459-a50), beam 8, logprob fusion, equal weights unchanged; MAP reported as primary
+  in the same pass; no dictionary or language correction.
+- Code: pool collection + `mbr_select` in `scripts/beam_eval_openfs_recognizer.py`; one
+  decode pass reports both selections. Sanity: MAP byte-identical to the HEAD harness on
+  the 32-clip smoke (37 errors / 20 exact - the a50-set smoke; the earlier journal quote
+  "39/20 for the a50 set" traces to the e54-member smoke) and full-split MAP reproduces
+  the recorded gate and best exactly (val 9,133 errors / 7,931 exact; test 8,698 / 8,735).
+- Validation (12,015 clips, beam 8): MBR **4.274% CER** (9,062 errors) / **65.98% exact**
+  (7,928) vs MAP gate 4.307% (9,133) / 66.01% (7,931) - 71 fewer errors, 3 fewer exact;
+  gate nominally earned (above the -39 flip band); test pass taken.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-soup5459-mbr.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): MBR **3.936% CER** (8,702 errors) / **69.74% exact**
+  (8,732) vs the 3.93% / 69.76% best: +4 errors, -3 exact - eighth sign flip of a
+  sub-0.05 pp validation delta; best unchanged at 3.93% / 69.76% (MAP).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-mbr.beam-eval-report.json`
+- Cost: smoke 2 x ~20 s / 608 MiB; validation 5,527 s / 879 MiB; test 5,971 s / 766 MiB
+  (batch 8, nice -n 19, shared GPU, two training jobs active).
+- Finding: selection-rule axis exhausted like beam-width saturation - the validation MBR
+  gain was concentrated on hard signers (d5fd -34, c6e5 -22) but did not exist on test
+  (+4): the fused posterior is confidently unimodal, MAP ~ MBR, and any consensus signal
+  lives inside the sub-0.05 pp band that now flips on test eight times in nine tries.
+  Members remain the only lever.
+- Status: l6-cos-EMA epoch ~91/150 (val-best e59 4.831%); l9-cos-EMA epoch ~11/100,
+  greedy val-best 6.81% / 50.99% and falling ~0.7/epoch - next iteration should check it
+  against the <=5.55% 5th-member trigger. Gates unchanged: 4.31% val / 3.93% test.
+- Verdict: negative on the primary metric; retire MBR/selection-rule tuning.
+
