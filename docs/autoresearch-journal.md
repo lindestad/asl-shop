@@ -1065,3 +1065,36 @@ pass. Update "Current best" in place when a run beats it.
   greedy val-best <= 4.70% or run plateau/finish (150-epoch cap) -> refresh the 4th
   member to the newest val-best snapshot and re-gate.
 - Verdict: positive; new best recorded.
+
+### 2026-10-23 — launched depth-capacity ensemble member: 9-layer cosine+EMA, full data (run in progress)
+
+- Idea: harvest triggers not fired - l6-cos-EMA greedy val-best still epoch 59 at 4.831%
+  / 62.71% (epochs 60-62 worse; trigger bar <=4.70%), eval-only levers all retired, so
+  take the only demonstrably productive member axis with untested headroom: depth. Depth
+  3->6 improved both single-model quality (5.51 -> 4.83 greedy within cos-EMA) and
+  ensemble value (l6-e82, l6ce members twice), so 6->9 is the named next step: **depth-
+  capacity 5th-member candidate**, cos-EMA recipe (the stronger recipe family), full
+  126,131-clip train slice, gaps representation.
+- Capacity housekeeping: killed seed2 (PID 1182605, epoch ~48, best 5.73%) - its axis was
+  retired as a member source by the ens5 flip and the job was consuming ~0.9 GiB plus
+  throughput the l6-cos-EMA climb needs.
+- Config: `--layers 9 --epochs 100 --lr-schedule cosine --warmup-epochs 5 --ema-decay
+  0.99995 --batch-size 4 --validation-batch-size 16`, Adam 1e-4, fp16 AMP, seed 42.
+  Batch 4: `gpu_budget.sh 6144` failed (3,971 free) so per rule 2 batch halved from the
+  champion's 8; EMA decay epoch-matched at 2x steps/epoch (0.99995, 20k-step horizon,
+  seed2 precedent). 100 epochs, not 150: the member joins at class mid-schedule, and this
+  bounds the cost of the deeper stack.
+- Smoke: 1,600 clips / 2 epochs at batch 4 peaked ~1.7 GiB (free 3,971 -> 2,279 MiB),
+  loss descending cleanly (post-norm 9 layers stable at 1e-4 + 5-epoch warmup).
+- Params: 26,191,292 (9-layer d_model 256 stack; arch-different from all 4 current
+  members). VRAM: ~1.6 GiB steady (free 5,105 -> 3,513 after launch, one other training
+  job active). Wall clock: ~13 steps/s -> ~2,400 s train + ~300 s validation per epoch,
+  ETA ~75 h for 100 epochs; joinable much earlier at member-class quality.
+- Output: `data/models/openfs-recognizer-gaps-full-layers9-cosine-ema/recognizer.pt`
+  (PID 1508445, log/pid under `data/logs/`). No test evaluation; none earned.
+- Gates unchanged: 4.36% val / 3.96% test. Triggers: l6-cos-EMA greedy val-best <=4.70%
+  -> 4th-member refresh round 3; l9-cos-EMA greedy val-best <=5.55% class -> snapshot,
+  beam-8 validation gate vs 4.36%, 5th member only if it beats ens4 on validation with a
+  materially better member (member-quality bar; seed/representation/TTA/LM/fusion/
+  weighting axes all retired).
+- Verdict: pending; run in progress.
