@@ -1325,4 +1325,40 @@ pass. Update "Current best" in place when a run beats it.
   unchanged: 4.31% val (soup5459 ens4) / 3.93% test.
 - Verdict: negative; 3L-cos-EMA-slot member upgrades retired.
 
+### 2026-10-23 — l9-cos-EMA epoch-16 as 5th ensemble member: val -75 errors (gate earned) but test -2 errors / exact -21; ninth val/test fade; best unchanged
+
+- Idea: `gpu_budget.sh 6144` failed (2,789 MiB free) so evaluation-only. l9-cos-EMA
+  epoch 16 hit greedy validation **5.878% CER / 56.64% exact** (frozen as
+  `recognizer-epoch16.pt`) - the same member class (5.85%) at which l6-e82 joined and
+  paid +0.32 pp at ens3; the <=5.55% trigger was not yet hit but depth is the last
+  unfailed structural diversity axis. Named experiment: **depth-diversity 5th member** -
+  ens4 (e62 + step-84 + l6-e82 + soup5459) + l9e16, equal weights, logprob fusion,
+  beam 8, no dictionary or language correction.
+- Screening: 32-clip smoke 27 errors / 22 exact vs ens4 37 / 20; greedy first-4,000-clip
+  subset ens4 3,214 (4.606%) vs ens5 3,179 errors (4.556%) / exact 2,687 vs 2,699 -
+  same direction, small.
+- Validation (12,015 clips, beam 8): **4.272% CER** (9,058 errors) / **65.80% exact**
+  (7,906) vs gate 4.307% (9,133) / 66.01% - 75 fewer errors but exact -25; CER gate
+  earned; test pass taken.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-soup5459-l9e16.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **3.933% CER** (8,696 errors) / **69.595% exact**
+  (8,714) vs best 3.934% (8,698) / 69.76% (8,735) - CER -2 errors (noise), exact -21;
+  ninth val/test fade of a sub-0.05 pp validation edge; best unchanged.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e16.beam-eval-report.json`
+- Params: 52,676,336 + 26,191,292 = 78,867,628 (mixed 3L/6L/9L stacks decode fine).
+  Cost: smoke 28 s / 757 MiB; screens 391 + 582 s / 276-381 MiB; validation 7,841 s /
+  1,062 MiB; test 8,528 s / 936 MiB (batch 8, nice -n 19, shared GPU, three training
+  jobs active).
+- Finding: the 5-member depth ensemble is ensemble-invisible at this member strength -
+  a 5.88%-class member now adds ~nothing to the saturated ens4 (contrast: the same-class
+  l6-e82 paid at ens3 where member diversity was scarce). Not an architecture kill:
+  l9 at epoch 16/100 is still climbing steeply.
+- Status: l9-cos-EMA epoch 20 greedy val-best **5.409% / 58.83%** - the <=5.55% trigger
+  has now fired; l6-cos-EMA epoch 114/150 (val-best e59 4.831%, bar <=4.70% unfired);
+  width384 epoch 1-2. Gates unchanged: 4.31% val / 3.93% test. Next iteration: refresh
+  the 5th-member candidate to the newest l9 val-best snapshot (e20+) and re-gate ens5
+  vs 4.31% - member-refresh is the lever that transferred four times.
+- Verdict: negative on exact; CER tie within noise; retire 5.88%-class l9 as a joinable
+  member, keep the l9 run for the fully-annealed snapshot.
+
 
