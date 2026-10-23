@@ -8,10 +8,14 @@ pass. Update "Current best" in place when a run beats it.
 
 - four-checkpoint cross-architecture/cross-recipe log-posterior ensemble: cosine+EMA
   epoch-62 and step-schedule epoch-84 full-data gaps transformers (8,828,348 params
-  each) plus 6-layer step-schedule epoch-82 and 6-layer cosine+EMA epoch-54 full-data
-  gaps transformers (17,509,820 params each; 52,676,336 total), beam search width 8,
+  each) plus 6-layer step-schedule epoch-82 and a weight-space soup (alpha 0.5) of the
+  6-layer cosine+EMA epoch-54 + epoch-59 snapshots full-data gaps transformers
+  (17,509,820 params each member; 52,676,336 total), beam search width 8,
   mean of per-step log-posteriors, no dictionary or language correction:
-  **3.96% CER**, 69.50% exact (12,521 test strings, 22 Oct 2026,
+  **3.93% CER**, 69.76% exact (12,521 test strings, 23 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459.beam-eval-report.json`)
+- previous: same ensemble with the plain 6-layer cosine+EMA epoch-54 checkpoint as
+  4th member: **3.96% CER**, 69.50% exact (22 Oct 2026,
   `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-l6ce54.beam-eval-report.json`)
 - previous: same ensemble with the 6-layer cosine+EMA epoch-37 member:
   **4.03% CER**, 69.26% exact (22 Oct 2026,
@@ -1098,3 +1102,48 @@ pass. Update "Current best" in place when a run beats it.
   materially better member (member-quality bar; seed/representation/TTA/LM/fusion/
   weighting axes all retired).
 - Verdict: pending; run in progress.
+
+### 2026-10-23 — weight-space soup of two l6-cos-EMA snapshots as 4th member: **NEW BEST 3.93% CER / 69.76% exact**
+
+- Idea: harvest triggers not fired (l6-cos-EMA greedy val-best still epoch 59 at 4.831%,
+  epochs 60-63 worse, trigger bar <=4.70%; l9 run still in epoch 1-2) and
+  `gpu_budget.sh 6144` failed (3,333 MiB free), so evaluation-only. The member-refresh
+  lever still pays but member gains from new val-best epochs are decelerating
+  (5.40 -> 5.11 -> 4.89 -> 4.83); test whether **weight-space snapshot averaging**
+  upgrades the member without training - distinct from the retired posterior-level
+  co-ensembling of same-run snapshots (here two snapshots fuse into ONE better member).
+- Code: new `scripts/soup_openfs_recognizer.py` - linear interpolation of state_dicts
+  for architecture-identical checkpoints, newer checkpoint's metadata carried;
+  sanity: alpha 0 output byte-identical to checkpoint-b.
+- Screening (greedy, first 4,000 validation clips, 69,783 chars): e59 4.881 (3,406)
+  / e54 4.997 (3,487) / soup alpha 0.5 **4.696 (3,277)** / alpha 0.25 4.725 (3,297) -
+  both soups beat both parents by >100 errors, far above the subset noise band.
+- Member greedy full validation (12,015 clips): soup alpha 0.5 **4.705% CER / 63.76%
+  exact** vs e59's 4.831% / 62.71% - the soup beats the run's own best epoch; a wider
+  EMA horizon (alpha 0.5, snapshots 5 epochs apart) found what 60+ training epochs
+  of the run's own val-best tracking did not.
+- Validation (12,015 clips, beam 8): ens4 with e62 + step-84 + l6-e82 unchanged,
+  4th member l6ce54 -> soup54/59: **4.31% CER** (9,133 errors) / **66.01% exact**
+  (7,931) vs gate 4.36% (9,255) / 65.64% - 122 fewer errors, +44 exact; member's own
+  greedy improved 0.126 pp (well above the flip band), so test pass earned (rule 3).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-soup5459.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **3.93% CER** (8,698 errors) / **69.76% exact**
+  (8,735) - new best on both metrics, previous 3.96% / 69.50%; fourth clean
+  member-improvement transfer (member -0.126 pp greedy -> val -0.056 pp -> test -0.065 pp).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459.beam-eval-report.json`
+- Params: unchanged 52,676,336 (member swap, same arch). Cost: 4 subset screens
+  224-276 s / 128 MiB each; member greedy val 839 s; smoke 20 s / 608 MiB; validation
+  5,559 s / 879 MiB; test 6,073 s / 766 MiB (batch 8, nice -n 19, shared GPU, two
+  training jobs active).
+- Finding: trajectory weight averaging is a free member upgrade - EMA checkpoints on
+  one cosine schedule share a basin, and averaging 5 epochs apart widens the averaging
+  horizon beyond the run's EMA decay. Next: soup with wider snapshot spacing once the
+  run has later val-bests (e.g. e59 + final), and soup future refresh snapshots
+  immediately; member-quality bar and refresh protocol unchanged.
+- Status: l6-cos-EMA (PID 1134787) epoch ~68/150, val-best epoch 59 (4.831%);
+  l9-cos-EMA running (its pid file recorded the dead launcher shell; real train PID
+  1508448, epoch 2 at harvest). Gates now reference 4.31% validation CER and 3.93%
+  test CER. Triggers: l6-cos-EMA greedy val-best <=4.70% or plateau/finish -> soup
+  newest snapshot pair and re-gate; l9-cos-EMA greedy val-best <=5.55% -> 5th-member
+  candidate screening.
+- Verdict: positive; new best recorded.
