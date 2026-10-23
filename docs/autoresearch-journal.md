@@ -1255,3 +1255,36 @@ pass. Update "Current best" in place when a run beats it.
   against the <=5.55% 5th-member trigger. Gates unchanged: 4.31% val / 3.93% test.
 - Verdict: negative on the primary metric; retire MBR/selection-rule tuning.
 
+### 2026-10-23 — launched width-capacity ensemble member candidate: 6-layer d_model 384, cosine+EMA, full data (run in progress)
+
+- Idea: harvest triggers not fired - l6-cos-EMA greedy val-best still e59 (4.831%,
+  epochs 60-91 all worse, bar <=4.70%); l9-cos-EMA epoch 12 greedy 6.53%, falling
+  ~0.3/epoch, still above its <=5.55% bar. Members remain the only lever; depth is
+  already in flight (l9), so take the untested capacity/arch-diversity axis:
+  **width**. Every member is d_model 256; a d_model 384 stack is arch-distinct from
+  all four (3L-256 x2, 6L-256 x2 incl. soup) and probes single-model quality beyond
+  the 6-layer recipe's 4.83% class.
+- Architecture: gaps transformer, `--layers 6 --d-model 384 --heads 12 --feedforward
+  3072` (head dim 32 unchanged); **39,286,076 params**. Recipe = champion
+  cosine+EMA: full 126,131-clip train slice, Adam 1e-4, 5-epoch warmup, cosine
+  anneal over 100 epochs (l9 precedent: long tails demonstrably don't pay for
+  joinable members), seed 42 (single variable is width; seed axis retired).
+- Batch 4 (not 8): `gpu_budget.sh 6144` failed (2,789 MiB free), so per rule 2
+  batch halved; EMA decay 0.99995 epoch-matched at 31,532 steps/epoch (~20k-step
+  horizon, l9/seed2 precedent).
+- Smoke: 1,600 clips / 2 epochs at batch 4 peaked **1,361 MiB**, loss 3.31 -> 2.85,
+  stable (post-norm 6x384 fine at 1e-4 + warmup).
+- VRAM: ~1.8 GiB steady (free 2,789 -> 965 MiB after launch; three training jobs
+  sharing the GPU), inside the ~6 GiB single-run budget. Wall clock: ~13 steps/s
+  -> ~2,400 s train + ~300 s validation per epoch, ETA ~75 h for 100 epochs;
+  joinable much earlier at member-class quality (l9 trajectory suggests <=6% class
+  by ~epoch 20).
+- Output: `data/models/openfs-recognizer-gaps-full-layers6-width384-cosine-ema/
+  recognizer.pt` (real train PID 1683248; pid file initially held the dead setsid
+  launcher shell, corrected). No test evaluation; none earned.
+- Gates unchanged: 4.31% val / 3.93% test. Triggers: l6-cos-EMA greedy val-best
+  <=4.70% -> 4th-member refresh; l9-cos-EMA greedy val-best <=5.55% -> 5th-member
+  screening; width384 greedy val-best <=5.55% class -> 5th/6th-member candidate
+  screening (beam-8 validation gate vs 4.31%, member-quality bar applies).
+- Verdict: pending; run in progress.
+
