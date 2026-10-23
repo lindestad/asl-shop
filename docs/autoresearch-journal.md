@@ -1147,3 +1147,39 @@ pass. Update "Current best" in place when a run beats it.
   newest snapshot pair and re-gate; l9-cos-EMA greedy val-best <=5.55% -> 5th-member
   candidate screening.
 - Verdict: positive; new best recorded.
+
+### 2026-10-23 — wider soup member (3-snapshot equal-weight e37+e54+e59): member greedy -0.107 pp but ensemble validation 4.31%/9,138 vs gate 4.31%/9,133; gate not passed, no test, best unchanged
+
+- Idea: harvest triggers not fired (l6-cos-EMA greedy val-best still epoch 59 at
+  4.831%, epochs 60-74 all worse, bar <=4.70%; l9-cos-EMA epoch 6, greedy 11.13%) and
+  ~2.8 GiB free (no training). Extend the working soup lever along its untested
+  spacing/weight axes: freeze the live e59 val-best as `recognizer-epoch59.pt`, build
+  three candidate members - e54+e59 alpha 0.75, e37+e59 alpha 0.5 (22-epoch spacing),
+  and an equal-weight 3-snapshot soup e37+e54+e59 - as 4th-member swaps into the
+  winning ens4 (e62 + step-84 + l6-e82 unchanged), beam 8, logprob fusion, equal
+  weights, no dictionary or language correction.
+- Screening (greedy, first 4,000 validation clips; baselines e59 4.881 / e54 4.997 /
+  a25 4.725 / a50 4.696): a75 4.782 (pair optimum is alpha 0.5, axis closed),
+  e37+e59 4.722, 3-way equal **4.664 (3,255, -22 vs a50)** - picked the 3-way.
+- Member greedy full validation: 3-way soup **4.598% CER / 64.21% exact** vs current
+  member 4.705% / 63.76% - a real -0.107 pp member improvement (wider averaging
+  horizon: 3 snapshots over 22 epochs).
+- Validation (12,015 clips, beam 8, ens4 with 3-way soup): **4.31% CER** (9,138
+  errors) / **65.98% exact** (7,927) vs the soup5459 gate 4.31% (9,133) / 66.01%
+  (7,931) - +5 errors, -4 exact; gate NOT passed; no test pass; best unchanged at
+  3.93% / 69.76%.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-soup3way.beam-eval-report.json`
+- Cost: 3 soups (CPU, seconds); 3 subset screens ~4 min each / 128 MiB; member greedy
+  val ~840 s / 132 MiB; smoke 20 s / 608 MiB (31 errors / 22 exact vs 39 / 20 for the
+  a50 set); validation beam 8 5,451 s / ~610 MiB (batch 8, nice -n 19, two training
+  jobs active).
+- Finding: member improvement does NOT transfer once the ensemble exists - the a50
+  soup beat its parent (member-led transfer, 4 clean rounds), but widening the soup
+  further (225-member-error gain) moved the ensemble +5 errors. Posterior-level
+  ensemble fusion already absorbs the l6-cos trajectory's averaging horizon; soup
+  quality beyond ~alpha 0.5 spacing 5 is ensemble-invisible. Retire soup spacing/
+  weight tuning on this member; future member refresh only from a genuinely newer
+  val-best epoch (<=4.70% trigger) or the l9 member.
+- Status: l6-cos-EMA epoch ~78/150 (val-best e59), l9-cos-EMA ~epoch 7; both running.
+  Gates unchanged: 4.31% val (soup5459 ens4) / 3.93% test. Triggers unchanged.
+- Verdict: negative; soup-member tuning exhausted.
