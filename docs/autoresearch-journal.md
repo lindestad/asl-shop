@@ -1448,3 +1448,30 @@ pass. Update "Current best" in place when a run beats it.
   Triggers: l9-cos-EMA greedy val-best materially below 4.81% -> refresh round 3;
   l6-cos-EMA <=4.70% -> 4th-member refresh; width384 relaunch when budget allows.
 - Verdict: positive; new best recorded.
+
+### 2026-10-24 — relaunched width384 member candidate (r2, batch 2, anti-fragmentation) after diagnosing r1 death as shared-GPU OOM (run in progress)
+
+- Idea: no member trigger fired (l9-cos-EMA greedy val-best e32 4.809%, only -0.086 pp
+  vs the frozen e27 4.895% - inside the flip band, refresh round 3 not justified;
+  l6-cos-EMA ~e145/150 val-best still e59 4.831%). Queued action from the last two
+  entries: relaunch the width384 run that died at epoch 2. Diagnosis of r1 death from
+  its .err: CUDA OOM mid-epoch-2 while a foreign tenant held 24.07 GiB (failed alloc
+  only 20 MiB against 1.83 GiB reserved-but-unallocated -> fragmentation + contention,
+  not the recipe).
+- Fix: relaunch identical recipe (6L d384 h12 ff3072, 39,286,076 params, cosine+EMA,
+  full 126,131-clip slice, seed 42, 100 epochs) with (a) batch 4 -> 2 per rule 2
+  (gpu_budget.sh 6144 failed: 2,789 MiB free), (b) EMA decay 0.99995 -> 0.999975
+  epoch-matched at 63,066 steps/epoch (~40k-step horizon, same 0.63-epoch window as
+  the l9/width384-r1 precedent), (c) PYTORCH_ALLOC_CONF=expandable_segments:True.
+  r1 dead artifacts moved to `...width384-cosine-ema-dead-e1/`.
+- Smoke: 1,600 clips / 2 epochs batch 2: stable (loss 3.3 -> 2.76), script-reported
+  peak VRAM **935 MiB**, min GPU free during smoke 1,381 MiB.
+- VRAM/wall: ~1.5 GiB steady (free 2,789 -> 1,277 after launch); ~15.3 steps/s ->
+  ~4,100 s train + ~500 s validation per epoch, ETA ~128 h for 100 epochs; joinable
+  member-class expected ~e20 (~30 h) on the r1/l9 trajectory precedent.
+- Output: `data/models/openfs-recognizer-gaps-full-layers6-width384-cosine-ema/
+  recognizer.pt` (PID 1974441, corrected pid file -r2.pid; log/err -r2). No test
+  evaluation; none earned. Triggers: width384 greedy val-best <=5.55% class ->
+  5th/6th-member screening vs 4.19% gate; l9-cos-EMA val-best materially below
+  4.81% -> refresh round 3; l6-cos-EMA <=4.70% -> 4th-member refresh (run ends ~e150).
+- Verdict: pending; run in progress.
