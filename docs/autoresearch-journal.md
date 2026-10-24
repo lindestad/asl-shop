@@ -10,9 +10,12 @@ pass. Update "Current best" in place when a run beats it.
   epoch-62 and step-schedule epoch-84 full-data gaps transformers (8,828,348 params
   each), 6-layer step-schedule epoch-82 and weight-space soup (alpha 0.5) of the
   6-layer cosine+EMA epoch-54 + epoch-59 snapshots full-data gaps transformers
-  (17,509,820 params each), plus the 9-layer cosine+EMA epoch-27 full-data gaps
+  (17,509,820 params each), plus the 9-layer cosine+EMA epoch-33 full-data gaps
   transformer (26,191,292 params; 78,867,628 total), beam search width 8,
   mean of per-step log-posteriors, no dictionary or language correction:
+  **3.81% CER**, 70.08% exact (12,521 test strings, 24 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e33.beam-eval-report.json`)
+- previous: same ensemble with the 9-layer cosine+EMA epoch-27 member:
   **3.83% CER**, 70.08% exact (12,521 test strings, 24 Oct 2026,
   `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e27.beam-eval-report.json`)
 - previous: same ensemble with the 9-layer cosine+EMA epoch-21 member:
@@ -1475,3 +1478,37 @@ pass. Update "Current best" in place when a run beats it.
   5th/6th-member screening vs 4.19% gate; l9-cos-EMA val-best materially below
   4.81% -> refresh round 3; l6-cos-EMA <=4.70% -> 4th-member refresh (run ends ~e150).
 - Verdict: pending; run in progress.
+
+### 2026-10-24 — 5th-member refresh round 3 (l9-cos-EMA e27 -> e33): **NEW BEST 3.81% CER / 70.08% exact**
+
+- Idea: l9-cos-EMA greedy val-best advanced e27 4.895 -> e32 4.809 -> e33 **4.719% /
+  63.36%** (frozen from live `recognizer.pt` as `recognizer-epoch33.pt`), -0.176 pp /
+  exact +1.84 pp vs the ensembled member - at the magnitude of the e54 refresh that
+  transferred (-0.22 pp member). `gpu_budget.sh 6144` failed (1,195 MiB free) so
+  evaluation-only. Named experiment: **5th-member refresh round 3** - ens4 (e62 +
+  step-84 + l6-e82 + soup5459) unchanged, l9e27 -> l9e33, equal weights, logprob
+  fusion, beam 8, no dictionary or language correction.
+- Screening: 32-clip smoke 29 errors / 23 exact (vs e27 28 / 21, noise); greedy 4k
+  subset ens5 **3,113 errors (4.461%) / 2,723 exact** vs l9e27 3,154 (4.514%) / 2,718
+  - -41 errors, direction positive.
+- Validation (12,015 clips, beam 8): **4.146% CER** (8,791 errors) / **66.70% exact**
+  (8,014) vs gate 4.190% (8,884) / 66.55% (7,996) - 93 fewer errors, +18 exact, both
+  metrics, outside the flip band; test pass earned (rule 3).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-soup5459-l9e33.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **3.813% CER** (8,430 errors) / **70.082% exact**
+  (8,775) vs best 3.833% (8,474) / 70.08% (8,775): 44 fewer errors, identical exact
+  count - new best on CER, exact tie. Seventh clean member-led transfer (member
+  greedy -0.176 pp -> val -0.044 pp -> test -0.020 pp).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e33.beam-eval-report.json`
+- Params: unchanged 78,867,628 (member swap, same 9L arch). Cost: smoke 41 s / 757 MiB;
+  screen ~700 s / 381 MiB; validation 9,888 s / 686 MiB; test 10,140 s / 623 MiB
+  (batch 4, nice -n 19, shared GPU; two attempts at batch 8 OOMed mid-start when a
+  foreign tenant grew to 24.07 GiB - retried with batch 4 +
+  PYTORCH_ALLOC_CONF=expandable_segments:True, which ran clean).
+- Status: l9-cos-EMA epoch ~42/100, greedy val-best already **e41 4.542% / 64.73%** -
+  refresh round 4 fires immediately next iteration (snapshot e41+, re-gate vs 4.15%);
+  l6-cos-EMA finished 150/150, final val-best e59 4.831% (late epochs ~5.69%, decaying -
+  4th-member slot frozen); width384-r2 epoch 7, greedy 8.89% falling, still far from
+  <=5.55% bar but alive (batch 2, ETA long).
+- Gates now 4.15% validation CER (ens5-l9e33 beam-8) / 3.81% test CER.
+- Verdict: positive; new best recorded (CER; exact tie).
