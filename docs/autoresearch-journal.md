@@ -6,7 +6,16 @@ pass. Update "Current best" in place when a run beats it.
 
 ## Current best
 
-- four-checkpoint cross-architecture/cross-recipe log-posterior ensemble: cosine+EMA
+- five-checkpoint cross-architecture/cross-recipe log-posterior ensemble: cosine+EMA
+  epoch-62 and step-schedule epoch-84 full-data gaps transformers (8,828,348 params
+  each), 6-layer step-schedule epoch-82 and weight-space soup (alpha 0.5) of the
+  6-layer cosine+EMA epoch-54 + epoch-59 snapshots full-data gaps transformers
+  (17,509,820 params each), plus the 9-layer cosine+EMA epoch-21 full-data gaps
+  transformer (26,191,292 params; 78,867,628 total), beam search width 8,
+  mean of per-step log-posteriors, no dictionary or language correction:
+  **3.87% CER**, 69.74% exact (12,521 test strings, 24 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e21.beam-eval-report.json`)
+- previous: four-checkpoint cross-architecture/cross-recipe log-posterior ensemble: cosine+EMA
   epoch-62 and step-schedule epoch-84 full-data gaps transformers (8,828,348 params
   each) plus 6-layer step-schedule epoch-82 and a weight-space soup (alpha 0.5) of the
   6-layer cosine+EMA epoch-54 + epoch-59 snapshots full-data gaps transformers
@@ -1360,5 +1369,40 @@ pass. Update "Current best" in place when a run beats it.
   vs 4.31% - member-refresh is the lever that transferred four times.
 - Verdict: negative on exact; CER tie within noise; retire 5.88%-class l9 as a joinable
   member, keep the l9 run for the fully-annealed snapshot.
+
+### 2026-10-24 — refreshed 5th ensemble member to l9-cos-EMA epoch-21: **NEW BEST 3.87% CER / 69.74% exact**
+
+- Idea: `gpu_budget.sh 6144` failed (2,789 MiB free) so evaluation-only. l9-cos-EMA greedy
+  val-best advanced e16 5.878 -> e21 5.339% / 59.33% (frozen as `recognizer-epoch21.pt`),
+  firing the <=5.55% trigger with a 0.54 pp member jump - far above the noise band that
+  produced nine val/test flips. Named experiment: **5th-member refresh round 1** - ens4
+  (e62 + step-84 + l6-e82 + soup5459) unchanged, l9e16 -> l9e21, equal weights, logprob
+  fusion, beam 8, no dictionary or language correction.
+- Screening: 32-clip smoke 27 errors / 22 exact (vs ens4 37 / 20); greedy first-4,000-clip
+  subset ens5 **3,150 errors (4.514%) / 2,698 exact** vs ens4 baseline 3,214 (4.606%).
+- Validation (12,015 clips, beam 8): **4.232% CER** (8,973 errors) / **66.27% exact**
+  (7,962) vs gate 4.307% (9,133) / 66.01% - 160 fewer errors, +31 exact; both metrics,
+  far outside the flip band; test pass earned (rule 3).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-soup5459-l9e21.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **3.874% CER** (8,566 errors) / **69.74% exact**
+  (8,732) - CER new best on both metrics, previous 3.93% / 69.76%; exact -3 strings
+  (tie within noise) while CER gained 132 errors. Fifth clean member-led transfer:
+  member greedy -0.54 pp -> val -0.076 pp -> test -0.060 pp.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e21.beam-eval-report.json`
+- Params: 52,676,336 + 26,191,292 = 78,867,628. Cost: smoke 28 s / 757 MiB; 4k screen
+  537 s / 381 MiB; validation 7,833 s / 1,062 MiB; test 8,566 s / 936 MiB (batch 8,
+  nice -n 19, shared GPU, two training jobs active).
+- Finding: the earlier l9e16 fade was a member-strength problem, not an architecture kill -
+  at 5.34% greedy the same 9L slot turns the "ensemble-invisible" depth member into a
+  record transfer. Member-refresh remains the only lever with a monotone transfer history.
+- Status: l9-cos-EMA epoch 27, greedy val-best **4.895% / 61.52%** and still climbing
+  steeply (next refresh when its val-best materially improves; l9e21 is now the 5th member).
+  l6-cos-EMA epoch 128/150, val-best still e59 4.831%, bar <=4.70% unfired and the run
+  plateaued/decaying since e59. width384 run DIED at epoch 2 (PID gone, no error in log,
+  only e1 checkpoint kept) - relaunch is the next-iteration training action.
+- Gates now reference 4.23% validation CER (ens5-l9e21 beam-8) and 3.87% test CER.
+  Triggers: l9-cos-EMA greedy val-best materially below 4.90% -> 5th-member refresh round 2;
+  l6-cos-EMA <=4.70% -> 4th-member refresh; width384 relaunch when GPU budget allows.
+- Verdict: positive; new best recorded.
 
 
