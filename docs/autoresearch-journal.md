@@ -10,9 +10,12 @@ pass. Update "Current best" in place when a run beats it.
   epoch-62 and step-schedule epoch-84 full-data gaps transformers (8,828,348 params
   each), 6-layer step-schedule epoch-82 and weight-space soup (alpha 0.5) of the
   6-layer cosine+EMA epoch-54 + epoch-59 snapshots full-data gaps transformers
-  (17,509,820 params each), plus the 9-layer cosine+EMA epoch-21 full-data gaps
+  (17,509,820 params each), plus the 9-layer cosine+EMA epoch-27 full-data gaps
   transformer (26,191,292 params; 78,867,628 total), beam search width 8,
   mean of per-step log-posteriors, no dictionary or language correction:
+  **3.83% CER**, 70.08% exact (12,521 test strings, 24 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e27.beam-eval-report.json`)
+- previous: same ensemble with the 9-layer cosine+EMA epoch-21 member:
   **3.87% CER**, 69.74% exact (12,521 test strings, 24 Oct 2026,
   `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e21.beam-eval-report.json`)
 - previous: four-checkpoint cross-architecture/cross-recipe log-posterior ensemble: cosine+EMA
@@ -1406,3 +1409,42 @@ pass. Update "Current best" in place when a run beats it.
 - Verdict: positive; new best recorded.
 
 
+### 2026-10-24 — 5th-member refresh round 2 (l9-cos-EMA e21 -> e27): **NEW BEST 3.83% CER / 70.08% exact**
+
+- Idea: the trigger set at the e21 round ("l9-cos-EMA greedy val-best materially below
+  4.90% -> refresh round 2") fired: l9 greedy validation-best advanced e21 5.339 ->
+  e27 4.895% / 61.52% (frozen as `recognizer-epoch27.pt`), a 0.444 pp member jump,
+  same class as the 0.54 pp e16->e21 transfer. `gpu_budget.sh 6144` failed (2,789 MiB
+  free; l6 132/150 and l9 e28 training) so evaluation-only. Named experiment:
+  **5th-member refresh round 2** - ens4 (e62 + step-84 + l6-e82 + soup5459) unchanged,
+  l9e21 -> l9e27, equal weights, logprob fusion, beam 8, no dictionary or language
+  correction.
+- Screening: 32-clip smoke 28 errors / 21 exact (vs l9e21 smoke 27 / 22 - 651 chars,
+  noise); greedy 4k subset ens5 **3,154 errors (4.520%) / 2,718 exact** vs l9e21
+  3,150 (4.514%) / 2,698: CER +4 (noise) but exact +20 - mixed within the flip band,
+  proceed to the decisive full gate since the member gain itself is real and large.
+- Validation (12,015 clips, beam 8): **4.190% CER** (8,884 errors) / **66.55% exact**
+  (7,996) vs gate 4.232% (8,973) / 66.27% - 89 fewer errors, +34 exact, both metrics,
+  outside the flip band; test pass earned (rule 3).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-soup5459-l9e27.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **3.833% CER** (8,474 errors) / **70.08% exact**
+  (8,775) vs best 3.874% (8,566) / 69.74% (8,732): 92 fewer errors AND 43 more exact
+  strings - first round in a while where val and test improve on both metrics;
+  sixth clean member-led transfer (member greedy -0.444 pp -> val -0.042 pp ->
+  test -0.041 pp).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e27.beam-eval-report.json`
+- Params: unchanged 78,867,628 (member swap, same 9L arch). Cost: smoke 28 s / 757 MiB;
+  screen 537 s / ~380 MiB; validation 7,675 s / 1,062 MiB; test 8,367 s / 936 MiB
+  (batch 8, nice -n 19, shared GPU, two training jobs active). Peak VRAM 1,062 MiB;
+  wall clock ~4.6 h GPU serial. MBR secondary decode (retired axis) 8,475 errors,
+  MAP reported as primary.
+- Status: l9-cos-EMA epoch 32/100, greedy val-best now **4.809% / 63.08%** (e32) and
+  still climbing - refresh round 3 when the val-best moves materially again (watch
+  e35+; cosine anneal has 68 epochs of tail left). l6-cos-EMA epoch 141/150, val-best
+  still e59 4.831%, <=4.70% bar unfired, decaying since e59 - 4th-member slot expected
+  to retire when the run ends unless a late epoch surprises. width384 still dead,
+  relaunch still budget-blocked (1,509-2,789 MiB free all session).
+- Gates now 4.19% validation CER (ens5-l9e27 beam-8) / 3.83% test CER.
+  Triggers: l9-cos-EMA greedy val-best materially below 4.81% -> refresh round 3;
+  l6-cos-EMA <=4.70% -> 4th-member refresh; width384 relaunch when budget allows.
+- Verdict: positive; new best recorded.
