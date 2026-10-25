@@ -10,9 +10,12 @@ pass. Update "Current best" in place when a run beats it.
   epoch-62 and step-schedule epoch-84 full-data gaps transformers (8,828,348 params
   each), 6-layer step-schedule epoch-82 and weight-space soup (alpha 0.5) of the
   6-layer cosine+EMA epoch-54 + epoch-59 snapshots full-data gaps transformers
-  (17,509,820 params each), plus the 9-layer cosine+EMA epoch-41 full-data gaps
+  (17,509,820 params each), plus the 9-layer cosine+EMA epoch-43 full-data gaps
   transformer (26,191,292 params; 78,867,628 total), beam search width 8,
   mean of per-step log-posteriors, no dictionary or language correction:
+  **3.730% CER**, 70.63% exact (12,521 test strings, 25 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e43.beam-eval-report.json`)
+- previous: same ensemble with the 9-layer cosine+EMA epoch-41 member:
   **3.777% CER**, 70.47% exact (12,521 test strings, 25 Oct 2026,
   `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e41.beam-eval-report.json`)
 - previous: same ensemble with the 9-layer cosine+EMA epoch-33 member:
@@ -1552,5 +1555,46 @@ pass. Update "Current best" in place when a run beats it.
   frozen member); width384-r2 alive at batch 2, still far from <=5.55% class.
 - Gates now 4.13% validation CER (ens5-l9e41 beam-8) / 3.78% test CER.
   Triggers: l9-cos-EMA greedy val-best materially below 4.54% -> refresh round 5;
+  width384 greedy val-best <=5.55% class -> 6th-member screening.
+- Verdict: positive; new best recorded (both CER and exact).
+
+### 2026-10-25 — 5th-member refresh round 5 (l9-cos-EMA e41 -> e43): **NEW BEST 3.73% CER / 70.63% exact**
+
+- Idea: `gpu_budget.sh 6144` failed (3,571 MiB free) so evaluation-only. History re-read
+  correction: the l9 run's true greedy validation-best is **e43 4.422% / 65.14%**
+  (val_score column; the round-4 status line misread the e50 row 4.522% as val-best),
+  i.e. the live `recognizer.pt` payload (epoch=43 confirmed, saved on improvement) is
+  already -0.120 pp / +0.41 pp better than the frozen e41 member - the member-gain
+  class at which the l6ce soup (-0.126 pp) transferred. Frozen `recognizer-epoch43.pt`
+  and ran the proven lever. Named experiment: **5th-member refresh round 5** - ens4
+  (e62 + step-84 + l6-e82 + soup5459) unchanged, l9e41 -> l9e43, equal weights,
+  logprob fusion, beam 8, no dictionary or language correction.
+- Screening: 32-clip beam-8 smoke 24 errors / 22 exact (vs l9e41 28 / 22); greedy 4k
+  subset ens5 **3,029 errors (4.341%) / 2,739 exact** vs l9e41 3,071 / 2,735 -
+  -42 errors, +4 exact; screen gate 3,071 passed.
+- Validation (12,015 clips, beam 8): **4.100% CER** (8,694 errors) / **67.11% exact**
+  (8,063) vs gate 4.133% (8,763) / 67.03% (8,054) - 69 fewer errors, +9 exact, both
+  metrics; test pass earned (rule 3).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-soup5459-l9e43.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **3.730% CER** (8,246 errors) / **70.63% exact**
+  (8,843) vs best 3.777% (8,351) / 70.47% (8,823): 105 fewer errors AND 20 more exact
+  strings - new best on both metrics, ninth clean member-led transfer (member greedy
+  -0.120 pp -> val -0.033 pp -> test -0.047 pp; test outgained val for the second
+  consecutive round).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e43.beam-eval-report.json`
+- Params: unchanged 78,867,628 (member swap, same 9L arch). Cost: smoke ~60 s / 534 MiB;
+  screen ~900 s / 346 MiB; validation 9,460 s / 686 MiB; test 10,303 s / 623 MiB
+  (batch 4, nice -n 19, shared GPU, two training jobs active; detached setsid runner
+  `scripts/run_ens5_l9e43.sh`, pid file `run-ens5-l9e43.pid`). Peak VRAM 686 MiB;
+  wall clock ~5.9 h GPU serial. MBR secondary decode: val 8,687 / test 8,244 (retired
+  selection axis, MAP reported as primary).
+- Status: l9-cos-EMA epoch 56/100, greedy val-best now e55 **4.417% / 65.45%** - only
+  -0.005 pp vs the frozen e43, inside the flip band; refresh round 6 not justified
+  (watch for a material drop below 4.42% as the cosine tail runs). l6-cos-EMA finished
+  (e59 4.831% frozen); width384-r2 epoch 16/100, greedy best e9 8.54%, far from the
+  <=5.55% member bar. Note for future harvests: trust the history `validation_score`
+  minimum, not the latest row.
+- Gates now 4.10% validation CER (ens5-l9e43 beam-8) / 3.73% test CER.
+  Triggers: l9-cos-EMA greedy val-best materially below 4.42% -> refresh round 6;
   width384 greedy val-best <=5.55% class -> 6th-member screening.
 - Verdict: positive; new best recorded (both CER and exact).
