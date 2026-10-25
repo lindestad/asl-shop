@@ -1697,3 +1697,42 @@ pass. Update "Current best" in place when a run beats it.
   31 cosine-tail epochs left) -> re-soup m5 when its val-best materially beats 4.42%.
   Gates now **4.06% validation CER** (pruned ens4 beam-8) / **3.70% test CER**.
 - Verdict: positive; new best recorded (both CER and exact), ensemble 11% cheaper.
+
+### 2026-10-25 — leave-one-out re-map of the pruned ens4: dropping l6-e82 wins val by -166 errors (largest earned margin yet) but test +19; tenth val/test sign flip; best unchanged
+
+- Idea: `gpu_budget.sh 6144` failed (5,409 MiB free; l9-cos-EMA epoch ~70/100, val-best
+  still e55 4.417%, no re-soup trigger) so evaluation-only. The named follow-up from the
+  ens5 prune entry: redundancy is context-dependent, so re-run the leave-one-out map on
+  the pruned ens4 (e62 + l6-e82 + soup5459 + l9soup); the drop-m2-vs-ens4 interaction was
+  untested. Beam 8, logprob fusion, equal weights, no dictionary or language correction.
+- Code: staged gated runner `scripts/run_ens4_prune.sh` (smokes -> 4k greedy screens ->
+  full-val beam-8 gate 8,601 -> test), detached `setsid`, log `data/logs/run-ens4-prune.log`.
+  ens4 4k baseline reused from the ens5-prune drop-m2 screen (2,978 errors / 2,765 exact -
+  identical members and subset).
+- Screens (greedy, first 4,000 validation clips; baseline 2,978): drop-m1(e62) **2,962 /
+  2,765** (-16); drop-m3(l6-e82) **2,918 / 2,781** (-60, best); drop-m4(soup5459) 3,044
+  (+66); drop-m5(l9soup) 3,116 (+138 - m5 carries all the signal, as in the ens5 map).
+  m3 now looks redundant exactly as m2 did before it.
+- Validation (12,015 clips, beam 8, ens3 = e62 + soup5459 + l9soup): **3.978% CER**
+  (8,435 errors) / **68.09% exact** (8,181) vs gate 4.057% (8,601) / 67.86% (8,153) -
+  166 fewer errors AND +28 exact: five times the old flip band and the largest earned
+  margin in the loop; test pass earned (rule 3).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens3-e62-soup5459-l9soup.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **3.711% CER** (8,205 errors) / **70.76% exact**
+  (8,860) vs best 3.702% (8,186) / 71.02% (8,892): **+19 errors, -32 exact - sign flipped**.
+  Tenth val/test flip and the first one far outside the sub-0.05 pp band: a -0.08 pp
+  validation gain reversed on test.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens3-e62-soup5459-l9soup.beam-eval-report.json`
+- Params: 70,039,280 -> 52,529,460 (member count 4 -> 3). Cost: 4 smokes ~13 s each /
+  360-530 MiB; 4 screens ~35 min total; validation 4,311 s / 532 MiB; test 4,789 s /
+  478 MiB (batch 4, nice -n 19, shared GPU). MBR secondary (retired axis): val 8,412 /
+  test 8,163. Best unchanged: ens4 e62 + l6-e82 + soup5459 + l9soup, 3.702% / 71.02%.
+- Finding: pruning is a one-shot lever, not a policy - drop-m2 transferred (-36 test
+  errors) but the context-updated map's next candidate reversed on test; l6-e82 is
+  validation-redundant yet test-useful (diversity insurance). Do not prune further on
+  validation evidence; validation-based member selection has now flipped sign ten times
+  and its reliability does not improve with margin size.
+- Status: l9-cos-EMA epoch ~75/100, val-best still e55 4.417% (trigger: materially below
+  4.42% -> re-soup m5). Gates unchanged: 4.06% val / 3.70% test.
+- Verdict: negative on the primary metric despite the largest validation margin earned;
+  retire iterative LOO pruning of the current member set.
