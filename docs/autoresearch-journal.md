@@ -1736,3 +1736,32 @@ pass. Update "Current best" in place when a run beats it.
   4.42% -> re-soup m5). Gates unchanged: 4.06% val / 3.70% test.
 - Verdict: negative on the primary metric despite the largest validation margin earned;
   retire iterative LOO pruning of the current member set.
+
+### 2026-10-25 — m5 soup backward horizon extension (4-way e33..e55, 5-way +e27): screens worse, gate not earned, no test, best unchanged
+
+- Idea: `gpu_budget.sh 6144` failed (5,409 MiB free; l9-cos-EMA epoch 73/100, val-best
+  still e55 4.417% - epochs 56-73 all worse, and the trainer only saves on improvement,
+  so no new weights exist past e55) - forward round-6 soup supply is blocked. The m5
+  slot's documented finding is "wide horizon wins at member level", tested only in the
+  forward direction (e41->e55). Untested: extend the 3-way soup BACKWARD using frozen
+  e33/e27 snapshots. Named experiment: **m5 soup backward extension** - equal-weight
+  4-way e33+e41+e43+e55 (22-epoch span) and 5-way +e27 (28-epoch span) via chained
+  `soup_openfs_recognizer.py`, screened as m5 swap into the pruned ens4
+  (e62 + l6-e82 + soup5459 unchanged), beam 8, logprob fusion, equal weights, no
+  dictionary or language correction.
+- Screening (greedy member-only, first 4,000 validation clips, 69,783 chars; current
+  member s3w baseline 2,908 / 2,750 exact): 4-way **2,980 / 2,715** (+72), 5-way
+  **3,106 / 2,690** (+198) - monotone degradation as weaker pre-plateau snapshots
+  (e33 4.719, e27 4.895 greedy) are averaged in. Screen gate (beat s3w by >=40) failed;
+  runner `scripts/run_ens4_l9soupwide.sh` stopped at stage 2: no member full-val, no
+  ensemble gate, no test. Best unchanged at 3.70% CER / 71.02% exact.
+- Cost: 2 soups (CPU, seconds); 2 4k screens ~5 min each / ~140 MiB; total ~11 min GPU.
+- Finding: the wide-horizon win in the m5 slot is basin-limited - soup averaging pays
+  only inside the val-best plateau (e41-e55); diluting with strictly-worse earlier
+  snapshots loses at member level regardless of horizon width. m5 round-6 supply needs
+  a genuine new l9 val-best better than e55, i.e. forward only. Retire backward soup
+  extension.
+- Status: l9-cos-EMA epoch 73/100 (val-best e55 4.417%, 27 cosine-tail epochs left ->
+  watch for val-best materially below 4.42%, then re-soup forward). Gates unchanged:
+  4.06% val (pruned ens4 beam-8) / 3.70% test.
+- Verdict: negative at screen level; m5 soup backward extension retired.
