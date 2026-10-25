@@ -6,7 +6,17 @@ pass. Update "Current best" in place when a run beats it.
 
 ## Current best
 
-- five-checkpoint cross-architecture/cross-recipe log-posterior ensemble: cosine+EMA
+- four-checkpoint cross-architecture/cross-recipe log-posterior ensemble (pruned from five):
+  cosine+EMA epoch-62 full-data 3-layer gaps transformer (8,828,348 params), 6-layer
+  step-schedule epoch-82 and weight-space soup (alpha 0.5) of the 6-layer cosine+EMA
+  epoch-54 + epoch-59 snapshots full-data gaps transformers (17,509,820 params each),
+  plus the 9-layer 3-way equal-weight trajectory soup of cosine+EMA epoch-41 + epoch-43 +
+  epoch-55 snapshots (26,191,292 params; 70,039,280 total) - the step-schedule epoch-84
+  3-layer member was pruned as redundant by a leave-one-out screen, beam search width 8,
+  mean of per-step log-posteriors, no dictionary or language correction:
+  **3.702% CER**, 71.02% exact (12,521 test strings, 25 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-l6e82-soup5459-l9soup.beam-eval-report.json`)
+- previous: five-checkpoint cross-architecture/cross-recipe log-posterior ensemble: cosine+EMA
   epoch-62 and step-schedule epoch-84 full-data gaps transformers (8,828,348 params
   each), 6-layer step-schedule epoch-82 and weight-space soup (alpha 0.5) of the
   6-layer cosine+EMA epoch-54 + epoch-59 snapshots full-data gaps transformers
@@ -1647,3 +1657,43 @@ pass. Update "Current best" in place when a run beats it.
   frozen); width384-r2 epoch 17/100, far from <=5.55% bar.
 - Gates now 4.09% validation CER (ens5-l9soup beam-8) / 3.72% test CER.
 - Verdict: positive; new best recorded (both CER and exact).
+
+### 2026-10-25 — ens5 leave-one-out pruning: drop redundant step-84 member -> **NEW BEST 3.70% CER / 71.02% exact**; width384-r2 died of training collapse (negative)
+
+- Idea: `gpu_budget.sh 6144` failed (5,409 MiB free; l9-cos-EMA at epoch 63/100) so
+  evaluation-only. The ensemble has only ever grown; the two slot-absorption findings
+  (m1 and m4 member upgrades ensemble-invisible) motivate the inverse untested axis.
+  Named experiment: **ens5 member pruning (leave-one-out)** - ens4 (e62 + step-84 +
+  l6-e82 + soup5459 + l9soup unchanged), beam 8, logprob fusion, equal weights, no
+  dictionary or language correction.
+- Screens (greedy, first 4,000 validation clips, 69,783 chars; ens5 baseline 3,017 /
+  2,747 exact): drop-m2(step-84) **2,978 / 2,765** (-39, +18); drop-m1(e62) 3,077 (+60);
+  drop-m3(l6-e82) 3,043 (+26); drop-m4(soup5459) 3,103 (+86); drop-m5(l9soup) 3,214
+  (+197). Redundancy map: the oldest 3L step member is redundant, the newest members
+  carry all the ensemble signal.
+- Validation (12,015 clips, beam 8, ens5 minus step-84): **4.057% CER** (8,601 errors) /
+  **67.86% exact** (8,153) vs gate 4.093% (8,679) / 67.27% - 78 fewer errors AND 71 more
+  exact, both metrics outside the flip band; test pass earned (rule 3).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-l6e82-soup5459-l9soup.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **3.702% CER** (8,186 errors) / **71.02% exact**
+  (8,892) - new best on both metrics, previous 3.719% (8,222) / 70.71% (8,854): 36 fewer
+  errors AND 38 more exact strings from *removing* a member.
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-l6e82-soup5459-l9soup.beam-eval-report.json`
+- Params: 78,867,628 -> **70,039,280** (member count 5 -> 4). Cost: smoke 29 errors / 21
+  exact; 6 screens ~6 x 900 s; validation 5,542 s / 626 MiB; test 5,989 s / 567 MiB
+  (batch 4, nice -n 19, shared GPU). MBR secondary (retired axis): val 8,589 / test 8,166.
+  Staged gated runner committed: `scripts/run_ens5_prune.sh`, detached log
+  `data/logs/run-ens5-prune.log`.
+- Negative housekeeping: **width384-r2 died mid-session - training collapse, not OOM**:
+  validation CER blew up to 144.7% at epoch 11 (exact 0.0%) and non-finite fp16 loss
+  killed it at epoch 17 step 39,532; best checkpoint e9 at 8.54% greedy, far from the
+  member bar. Batch 2 destabilizes the d384 stack; with r1's OOM that closes the width
+  axis (retire width384; restart budget-blocked anyway).
+- Finding: a redundant member is ensemble noise - dropping it gained -36 test errors /
+  +38 exact while dropping m1/m3/m4/m5 all degraded even ens5 at screen level. Redundancy
+  is context-dependent, so re-run the LOO map on the pruned ens4 next (m1 may no longer
+  be absorbed now that m2 is gone; drop-m2-vs-ens4 interaction untested).
+- Status: l9-cos-EMA epoch 69/100, greedy val-best still e55 4.417% (no move since e55;
+  31 cosine-tail epochs left) -> re-soup m5 when its val-best materially beats 4.42%.
+  Gates now **4.06% validation CER** (pruned ens4 beam-8) / **3.70% test CER**.
+- Verdict: positive; new best recorded (both CER and exact), ensemble 11% cheaper.
