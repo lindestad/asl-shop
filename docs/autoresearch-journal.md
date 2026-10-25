@@ -1765,3 +1765,36 @@ pass. Update "Current best" in place when a run beats it.
   watch for val-best materially below 4.42%, then re-soup forward). Gates unchanged:
   4.06% val (pruned ens4 beam-8) / 3.70% test.
 - Verdict: negative at screen level; m5 soup backward extension retired.
+
+### 2026-10-25 — launched depth-capacity member candidate: 12-layer cosine+EMA, full data (run in progress)
+
+- Idea: no member trigger fired (l9-cos-EMA val-best still e55 4.417%, epochs 56-73 all
+  worse; trainer saves only on improvement, so no l9 weights exist past e55 and m5
+  forward soup supply is blocked) and `gpu_budget.sh 6144` failed (5,409 MiB free), but
+  all eval-only levers are retired and members remain the only lever - the journal's
+  standing claim is depth is the last unfailed structural diversity axis, and l9soup
+  (4.247% greedy) is the strongest member ever. Named experiment: **depth-capacity 12L
+  member candidate** - the 9->12 depth step, cos-EMA recipe (stronger family), full
+  126,131-clip train slice, gaps representation, seed 42.
+- Config: `--layers 12 --epochs 100 --lr-schedule cosine --warmup-epochs 5 --ema-decay
+  0.999975 --batch-size 2 --validation-batch-size 16`, Adam 1e-4, fp16 AMP,
+  PYTORCH_ALLOC_CONF=expandable_segments:True. Batch 2: budget check failed so per rule
+  2 halved from the l9 run's batch 4; EMA decay epoch-matched at 63,066 steps/epoch
+  (~40k-step horizon, l9/width384-r2 precedent). Risk noted: width384-r2 collapsed at
+  batch 2 (d384), but the d256 l9 stack ran stable at batch 4 and this stack is its
+  direct continuation.
+- Smoke: 1,600 clips / 2 epochs at batch 2, loss 3.3 -> 2.84 stable, peak VRAM 1,025 MiB.
+- Params: 34,872,764 (12-layer d_model 256; +8,681,472 per 3 layers exactly as l9-l6).
+  VRAM: ~1.5 GiB steady (free 5,409 -> 3,905 MiB after launch), inside the 6 GiB budget.
+  Wall clock: ~9.4 steps/s -> ~6,700 s train + ~600 s validation per epoch, ETA ~200 h
+  for 100 epochs; joinable member-class expected ~epoch 20 (~40 h) on the l9 trajectory.
+- Output: `data/models/openfs-recognizer-gaps-full-layers12-cosine-ema/recognizer.pt`
+  (real train PID 2502729 - pid file first caught the dead launcher shell again,
+  corrected). Logs `data/logs/openfs-recognizer-gaps-full-layers12-cosine-ema.log/.err`.
+  No test evaluation; none earned.
+- Status: l9-cos-EMA epoch 73/100 (val-best e55 4.417%; re-soup m5 if a tail epoch beats
+  it materially), l6-cos-EMA finished. Gates unchanged: 4.06% val / 3.70% test.
+  Triggers: l12-cos-EMA greedy val-best <=5.55% class -> 5th-member slot screening vs
+  the l9soup member (member-quality bar applies); l9-cos-EMA val-best materially below
+  4.42% -> forward re-soup.
+- Verdict: pending; run in progress.
