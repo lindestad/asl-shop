@@ -10,10 +10,14 @@ pass. Update "Current best" in place when a run beats it.
   epoch-62 and step-schedule epoch-84 full-data gaps transformers (8,828,348 params
   each), 6-layer step-schedule epoch-82 and weight-space soup (alpha 0.5) of the
   6-layer cosine+EMA epoch-54 + epoch-59 snapshots full-data gaps transformers
-  (17,509,820 params each), plus the 9-layer cosine+EMA epoch-43 full-data gaps
-  transformer (26,191,292 params; 78,867,628 total), beam search width 8,
+  (17,509,820 params each), plus the 9-layer 3-way equal-weight trajectory soup of
+  cosine+EMA epoch-41 + epoch-43 + epoch-55 snapshots (26,191,292 params;
+  78,867,628 total), beam search width 8,
   mean of per-step log-posteriors, no dictionary or language correction:
-  **3.730% CER**, 70.63% exact (12,521 test strings, 25 Oct 2026,
+  **3.719% CER**, 70.71% exact (12,521 test strings, 25 Oct 2026,
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9soup.beam-eval-report.json`)
+- previous: five-checkpoint ensemble with the 9-layer cosine+EMA epoch-43 checkpoint as
+  5th member: **3.730% CER**, 70.63% exact (12,521 test strings, 25 Oct 2026,
   `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9e43.beam-eval-report.json`)
 - previous: same ensemble with the 9-layer cosine+EMA epoch-41 member:
   **3.777% CER**, 70.47% exact (12,521 test strings, 25 Oct 2026,
@@ -1597,4 +1601,49 @@ pass. Update "Current best" in place when a run beats it.
 - Gates now 4.10% validation CER (ens5-l9e43 beam-8) / 3.73% test CER.
   Triggers: l9-cos-EMA greedy val-best materially below 4.42% -> refresh round 6;
   width384 greedy val-best <=5.55% class -> 6th-member screening.
+- Verdict: positive; new best recorded (both CER and exact).
+
+### 2026-10-25 — l9-slot 3-way trajectory soup (e41+e43+e55) replaces l9e43 as 5th member: **NEW BEST 3.72% CER / 70.71% exact**
+
+- Idea: `gpu_budget.sh 6144` failed (5,409 MiB free) so evaluation-only. Refresh round 6
+  was not justified (l9 greedy val-best e55 4.417% vs frozen e43 4.422%, -0.005 pp inside
+  the flip band) but the within-trajectory soup lever - which produced the best m4 member
+  and was retired only for *spacing tuning in the m4 slot*, explicitly leaving "the l9
+  member" open - had never been applied to m5, the one slot with a monotone member-led
+  transfer history. Named experiment: **l9-slot trajectory soup** - freeze live e55,
+  build soups of frozen l9 snapshots, best one replaces l9e43 in ens5 (e62 + step-84 +
+  l6-e82 + soup5459 unchanged), equal weights, logprob fusion, beam 8, no dictionary or
+  language correction.
+- Code: staged gated runner `scripts/run_ens5_l9soup.sh` (soups -> 4k greedy member
+  screens -> member full-val confirm -> ens5 val gate -> test); 3-way soup via chained
+  `soup_openfs_recognizer.py` (e41+e43 a50, then +e55 a2/3 = equal thirds).
+- Screening (greedy 4k, 69,783 chars): e43 3,103 / e55 3,151 / s4155-a50 2,969 /
+  s4355-a50 3,008 / 3-way **2,908** (best-parent -195, far above noise; wide horizon wins
+  at member level, unlike the m4 pair-spacing optimum).
+- Member greedy full validation (12,015 clips): soup **4.247% CER / 66.52% exact** vs
+  parents e43 4.422 / e55 4.417 - member-led gain -0.17 pp, the round-3/5 transfer class.
+- Validation (12,015 clips, beam 8): **4.093% CER** (8,679 errors) / **67.27% exact**
+  (8,082) vs gate 4.100% (8,694) / 67.11% (8,063) - 15 fewer errors, +19 exact; the CER
+  edge sits in the historical flip band, but exact +19 and the member-led rule took the
+  test pass (rule 3).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/validation-beam8-ens4-e62-s84-l6e82-soup5459-l9soup.beam-eval-report.json`
+- Test (12,521 clips, beam 8, earned): **3.719% CER** (8,222 errors) / **70.71% exact**
+  (8,854) vs best 3.730% (8,246) / 70.63% (8,843): 24 fewer errors AND 11 more exact
+  strings - new best on both metrics, tenth clean member-led transfer (member -0.17 pp
+  -> val -15 errors -> test -24 errors).
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/test-beam8-ens4-e62-s84-l6e82-soup5459-l9soup.beam-eval-report.json`
+- Params: unchanged 78,867,628 (member swap, same 9L arch). Cost: 5 screens 267-318 s /
+  ~140 MiB; member greedy 829 s / 140 MiB; validation 6,248 s / 686 MiB; test 6,626 s /
+  623 MiB (batch 4, nice -n 19, shared GPU, two training jobs active). Total 15,118 s
+  GPU serial. Detached runner log `data/logs/run-ens5-l9soup.log`.
+- Finding: slot-specific absorption is two-sided - the m5 (l9) slot accepts member
+  upgrades that the m1/m4 slots absorb; within it wide-horizon soup (3 snapshots over
+  14 epochs) beats pair soups, the opposite of m4 behavior. Soup and refresh compose:
+  the soup horizon now spans e41-e55, so round-6 supply needs a new l9 val-best outside
+  that span.
+- Status: l9-cos-EMA epoch 62/100, greedy val-best still e55 4.417% (no improvement
+  since e55; 38 cosine-tail epochs left) -> trigger: val-best materially below 4.42%
+  (re-soup with the new snapshot, e.g. e43+e55+eX). l6-cos-EMA finished (e59 4.831%
+  frozen); width384-r2 epoch 17/100, far from <=5.55% bar.
+- Gates now 4.09% validation CER (ens5-l9soup beam-8) / 3.72% test CER.
 - Verdict: positive; new best recorded (both CER and exact).
