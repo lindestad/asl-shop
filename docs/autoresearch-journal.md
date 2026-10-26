@@ -1895,3 +1895,31 @@ pass. Update "Current best" in place when a run beats it.
   fusion stays the fusion mechanism.  Gates unchanged: 4.06% val / 3.70% test.
 - Reports: `lf-screen4k-ens4` / `lf-validation-ens4` .late-fusion-eval-report.json in
   `data/models/openfs-recognizer-gaps-full-cosine-ema/`.
+
+### 2026-10-26 — launched missing l9 step-schedule full-data member candidate (run in progress)
+
+- Idea: capacity check failed first (`gpu_budget.sh 6144` free 1,973 MiB with l9-cos-EMA,
+  l12-cos-EMA, and ft1 active). Stopped the plateaued l9-cos-EMA original (epoch 81,
+  val-best frozen at e55 4.417%, tail e76-e81 4.70-4.75%, trainer saves only on
+  improvement; e41/e43/e55 snapshots and s3w soup already frozen). Free rose only to
+  4,309 MiB, so stopped l12-cos-EMA (only epoch 3, val CER 22.53%, far from joinable
+  member class) rather than the more promising ft1 reheat. Budget passed after that
+  (free 6,199 MiB). Launched the missing recipe cell: **l9 step-schedule full-data gaps
+  transformer** - l9 cos-EMA supplies the best member (s3w 4.247% greedy), l6 step-e82 is
+  a proven diverse current-best member, but l9 step has never been run.
+- Config: `--layers 9 --epochs 100 --lr-schedule step --batch-size 4
+  --validation-batch-size 16 --seed 42`; defaults `lr=1e-4`, `lr-step=80`,
+  `lr-gamma=0.1`, `d_model=256`, no EMA. Batch 4 after budget pass (same batch as the
+  clean l9 cos-EMA precedent). `PYTORCH_ALLOC_CONF=expandable_segments:True`.
+- Output: `data/models/openfs-recognizer-gaps-full-layers9-step/recognizer.pt`.
+  Logs/PID: `data/logs/openfs-layers9-step.log/.pid`; pid file first caught the launcher
+  shell, corrected to real train PID 2616355. Params 26,191,292. Process GPU use ~1.68
+  GiB early, within the 6 GiB budget. No smoke run: model shape and batch-4 l9 config
+  already ran clean; only the LR schedule changed.
+- Early log: epoch 1 stable, loss ~2.73 at 1,820/63,066 steps (~13 steps/s). No
+  validation result yet.
+- Status: ft1-cosine-restart continues (best so far 4.510% greedy, still above the s3w
+  member's 4.247% class); l9-cos-EMA and l12-cos-EMA stopped for capacity. Gates
+  unchanged: 4.06% val / 3.702% test.
+- Verdict: pending; run in progress. Trigger: l9-step greedy val-best enters member class
+  (roughly <=5.55%) -> 4k member screen vs s3w baseline, then full-val / ens4 gate.
