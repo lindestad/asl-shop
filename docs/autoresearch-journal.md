@@ -1798,3 +1798,36 @@ pass. Update "Current best" in place when a run beats it.
   the l9soup member (member-quality bar applies); l9-cos-EMA val-best materially below
   4.42% -> forward re-soup.
 - Verdict: pending; run in progress.
+
+### 2026-10-26 — m5 soup weight tilt (e41-heavy / e55-heavy 3-way): screens +27/-4 vs equal thirds, gate not earned, no test, best unchanged
+
+- Idea: `gpu_budget.sh 6144` failed (3,903 MiB free; l9-cos-EMA epoch 75/100, l12-cos-EMA
+  epoch 1/100) so evaluation-only. Harvest triggers still blocked: l9 greedy val-best
+  still e55 4.417% / 65.45% through epoch 74 (epochs 56-74 all worse; trainer saves only
+  on improvement -> no new m5 soup supply). The last untouched knob inside the one slot
+  with a monotone member-led transfer history is soup-internal snapshot WEIGHTS: the
+  s3w member (e41+e43+e55) is equal-thirds by construction; retired weight-tuning
+  statements were m4-slot-scoped, and backward extension was about snapshot SET, not
+  weights. Named experiment: **m5 soup weight tilt** - w41h (0.50 e41 / 0.25 e43 /
+  0.25 e55) and w55h (0.25 / 0.25 / 0.50) via chained `soup_openfs_recognizer.py`
+  (alpha = weight of checkpoint-a), screened as m5 swaps into the pruned ens4 (e62 +
+  l6-e82 + soup5459 unchanged), beam 8, logprob fusion, equal member weights, no
+  dictionary or language correction.
+- Code: staged gated runner `scripts/run_ens4_l9soupw.sh` (soups -> 4k greedy member
+  screens, margin gate >=40 vs s3w 2,908 -> member full-val confirm >=60 vs 9,004 ->
+  ens4 val gate 8,601 -> test), detached setsid, log `data/logs/run-ens4-l9soupw.log`.
+- Screening (greedy member-only, first 4,000 validation clips, 69,783 chars; s3w
+  baseline 2,908 / 2,750 exact): w41h **2,935 / 2,740** (+27), w55h **2,904 / 2,748**
+  (-4). Margin gate failed; runner stopped at stage 2: no member full-val, no ensemble
+  gate, no test. Best unchanged at 3.702% CER / 71.02% exact.
+- Cost: 2 soups (CPU, seconds); 2 4k greedy screens ~390 + ~420 s / ~140 MiB
+  (batch 4, nice -n 19, two training jobs active); total ~15 min GPU.
+- Finding: equal thirds sit at the member-level weight optimum of the plateau basin -
+  tilting toward the best parents (w55h) is noise, tilting toward the weakest (w41h)
+  hurts; consistent with the two-sided picture where e41 pays only at its equal share.
+  m5 soup axis now fully closed (spacing, set, weights); forward supply still needs a
+  genuine l9 val-best < 4.42% (cosine tail, epochs 76-100) or the l12 trajectory.
+- Status: l9-cos-EMA epoch ~75/100 (val-best e55); l12-cos-EMA epoch ~1-2/100
+  (warmup, loss ~2.79, ETA ~200 h, joinable class ~epoch 20). Gates unchanged:
+  4.06% val / 3.70% test.
+- Verdict: negative at screen level; m5 soup weight tuning retired.
