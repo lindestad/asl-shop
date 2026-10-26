@@ -1831,3 +1831,37 @@ pass. Update "Current best" in place when a run beats it.
   (warmup, loss ~2.79, ETA ~200 h, joinable class ~epoch 20). Gates unchanged:
   4.06% val / 3.70% test.
 - Verdict: negative at screen level; m5 soup weight tuning retired.
+
+### 2026-10-26 — launched m5 forward-supply lever: cosine-restart fine-tune of the l9soup weights (run in progress)
+
+- Idea: `gpu_budget.sh 6144` failed (3,567 MiB free; l9-cos-EMA epoch 75/100 val-best
+  still e55 4.417% - epochs 56-75 all worse and the trainer saves only on improvement,
+  so no m5 soup supply exists) and every eval-only lever is retired. The blocked m5
+  forward supply needs "a genuine new l9 val-best" - manufacture one by resuming FROM
+  the best member and re-annealing: named experiment **cosine-restart fine-tune of the
+  m5 soup member** (lr-restart/cyclic-reheat mechanism; distinct from retired soup
+  spacing/set/weights - this produces new trajectory weights, not averages of old ones).
+- Mechanism: existing `--resume` loads weights only (fresh Adam, fresh EMA shadow
+  initialized from the soup, `best=inf` so every val-improving epoch saves a snapshot).
+  Init from `recognizer-soup-e41e43e55-3w.pt` (member greedy 4.247%/66.52%), short
+  shallow cosine reheat: 15 epochs, peak lr 2e-5 (0.2x pretrain peak - enough drift to
+  move inside the basin, small enough to stay in it), 2-epoch warmup, EMA 0.999975
+  epoch-matched, `--warm-epoch 0` so aux losses (entropy/monotonicity) match the
+  converged model from epoch 1.
+- Batch 2 (not 4): budget check failed, halved per rule 2; l12 precedent at same batch
+  and d256 family (no fp16 instability at epoch 1+; width384 collapse was d384).
+  PYTORCH_ALLOC_CONF=expandable_segments:True (foreign tenant 24 GiB history).
+- Smoke (1,600 clips / 2 epochs, 400-clip val): loss started 0.154 (converged level -
+  resume verified), peak VRAM 779 MiB, val CER already 2.29% best - member class intact.
+- Params: 26,191,292 (9L d256). VRAM: ~1.1 GiB steady (free 3,567 -> 2,325 with all
+  three jobs running). Wall clock: ~11 steps/s at 63,066 steps/epoch -> ~1.75 h/epoch,
+  15 epochs ~26 h. Output:
+  `data/models/openfs-recognizer-gaps-full-layers9-cosine-ema-ft1/recognizer.pt`
+  (PID 2527854, log/pid `data/logs/openfs-recognizer-gaps-full-layers9-cosine-ema-ft1.*`).
+- Harvest protocol next iterations: ft1 greedy val-best materially below the member's
+  own 4.247% -> 4k member screen (vs s3w baseline 2,908 / 2,750, margin gate >=40) ->
+  member full-val confirm -> ens4 gate 8,601 -> test. If the fine-tune trajectory
+  reaches a new plateau, its snapshots re-open the m5 soup axis (forward only).
+- Status: l9-cos-EMA epoch ~76/100 (e55 frozen member), l12-cos-EMA epoch ~2/100.
+  Gates unchanged: 4.06% val / 3.70% test.
+- Verdict: pending; run in progress.
