@@ -1923,3 +1923,46 @@ pass. Update "Current best" in place when a run beats it.
   unchanged: 4.06% val / 3.702% test.
 - Verdict: pending; run in progress. Trigger: l9-step greedy val-best enters member class
   (roughly <=5.55%) -> 4k member screen vs s3w baseline, then full-val / ens4 gate.
+
+### 2026-10-26 — m5 forward soup supply from the ft1 reheat trajectory (s3w x ft1-e2 chords; run in progress)
+
+- Idea: `gpu_budget.sh 6144` failed (4,515 MiB free; ft1 + l9-step training active) so
+  evaluation-only. Harvest triggers blocked: ft1's own val-best is e2 4.510% / 65.29%
+  (worse than the s3w member's 4.247%, swap trigger not earned) and l9-step is mid
+  epoch 1 (no validation yet). But the ft1 launch entry pre-named the supply route:
+  "if the fine-tune trajectory reaches a new plateau, its snapshots re-open the m5 soup
+  axis (forward only)" - and ft1 was initialized FROM the s3w soup at 0.2x lr, so its
+  trajectory is same-basin by construction (no cross-recipe barrier; resume verified:
+  loss starts at converged 0.154). A worse same-basin chord point is legitimate soup
+  supply - m4 precedent: the a50 soup beat BOTH parents. Named experiment: **m5 forward
+  soup supply from the ft1 trajectory** - chords s3w x ft1-e2 at alpha (s3w weight)
+  0.75/0.50/0.25 via `soup_openfs_recognizer.py`, best one screens as m5 swap into the
+  pruned ens4 (e62 + l6e82 + soup5459 unchanged), beam 8, logprob fusion, equal member
+  weights, no dictionary or language correction. Deviation from the ft1 protocol stated:
+  uses a pre-plateau reheat point (e2) instead of waiting for a sub-member val-best.
+- Snapshots: live ft1 `recognizer.pt` frozen as `recognizer-ft1-e2.pt` (epoch=2
+  confirmed) before evaluation so the running job cannot swap it; soup compatibility
+  checks passed (identical arch/meta, 319 state-dict keys).
+- Smoke: a50 chord greedy 32-clip 30 errors / 18 exact - member-class, basin intact.
+- Code: staged gated runner `scripts/run_ens4_l9soupft1.sh` (soups -> 4k greedy member
+  screens, margin gate >=40 vs s3w 2,908/2,750 -> member full-val confirm >=60 vs
+  9,004 -> ens4 val gate 8,601 -> test), detached setsid, log/pid
+  `data/logs/run-ens4-l9soupft1.*` (runner PID 2626359).
+- Cost: 3 soups (CPU, seconds) + smoke 5 s / 131 MiB; 3 screens ~420+430+400 s
+  (~140 MiB each, batch 4, nice -n 19, two training jobs active); total ~22 min GPU.
+  Runner stopped at stage 2: no member full-val, no ensemble gate, no test.
+- Screening (greedy member-only, first 4,000 validation clips, 69,783 chars; s3w
+  baseline 2,908 / 2,750): a75 **2,909 / 2,755** (+1), a50 **2,939 / 2,752** (+31),
+  a25 **3,034 / 2,720** (+126) - strictly monotone degradation in ft1 weight; margin
+  gate (>=40 better) failed at every alpha. Best unchanged 3.702% / 71.02%.
+- Finding: a mid-reheat point is not soup supply - the chord degrades linearly with the
+  worse point's weight (no m4-style "soup beats both parents" effect). The m4 pair works
+  because both parents sit on ONE converged trajectory; ft1-e2 is 2 epochs of drift
+  AWAY from the member along a direction that is worse, so the chord is a diluted
+  member, not a widened horizon. Corollary warning for ft1 itself: the reheat has not
+  yet pointed the trajectory below the member (val-best still e2 4.510%). m5 forward
+  supply still requires a genuine ft1 val-best below 4.247% (cosine tail epochs 5-15)
+  or the l9-step trajectory. Retire chording mid-reheat (pre-plateau) points.
+- Status: ft1 epoch ~5/15 (val best e2 4.510%); l9-step epoch 1-2 in progress. Gates
+  unchanged: 4.06% val / 3.702% test.
+- Verdict: negative at screen level; mid-reheat soup chords retired.
