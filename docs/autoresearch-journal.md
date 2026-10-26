@@ -1865,3 +1865,33 @@ pass. Update "Current best" in place when a run beats it.
 - Status: l9-cos-EMA epoch ~76/100 (e55 frozen member), l12-cos-EMA epoch ~2/100.
   Gates unchanged: 4.06% val / 3.70% test.
 - Verdict: pending; run in progress.
+
+### 2026-10-26 — hypothesis-level (late) fusion of ens4 members: screen-pass reversed at full validation; axis retired
+
+- Idea: last untried combination axis is the *hypothesis space*: instead of averaging
+  frame posteriors (frame-level logprob fusion, current best), decode each ens4 member
+  independently and combine strings.  New script
+  `scripts/late_fusion_eval_openfs_recognizer.py`: every member beam-decodes the
+  identical gap-preserving batch on its own; primary selection is the median hypothesis
+  (medoid under unit-cost Levenshtein over the member MAP hypotheses), secondary is a
+  cross-member MBR over pooled beam hypotheses (per-member score-softmax average, top-8
+  pool cap per member); no dictionary or language correction, no checkpoints written.
+- Sanity: single-member late-fusion 4k screen reproduced the recorded m5-only greedy
+  screen byte-exact (2,908 err / 2,750 exact) - decode path verified.
+- Members (all gaps, same labels): e62 3L cos-EMA (8,828,348) + l6 step e82 (17,509,820)
+  + l6ce soup5459 (17,509,820) + l9soup e41e43e55-3w (26,191,292); 70,039,280 total.
+- 4k screen (member beam 1, batch 4, 3,112 s under GPU contention, peak 303 MiB):
+  medoid 2,876 err / 2,737 exact vs ens4 frame-fusion screen baseline 2,978 / 2,765 -
+  +102 errors, clears the >=40 gate.  Cross-member MBR identical to medoid (beam-1
+  pools).  Best single member (m5) 2,908, so late fusion beat every member too.
+- Full validation (member beam 1, batch 4, 9,478 s, peak 307 MiB): medoid 8,662 err /
+  4.085% CER / 66.40% exact (7,978) vs ens4 frame-level beam-8 gate 8,601 / 4.057% /
+  67.86% (8,153).  Fails by 61 errors; cross-member MBR again identical.  Exact-match
+  loss (-175) exceeds the CER story: medoid trades whole-string exactness for
+  Levenshtein distance, and the frame posterior still dominates at full scale.
+- Verdict: negative - the 4k screen margin reversed at full validation (+102 -> -61,
+  a ~163-error swing; 4k screens are ~3x noisier than assumed for *selection-rule*
+  changes).  Late-fusion/medoid/cross-member-MBR axis retired; frame-level logprob
+  fusion stays the fusion mechanism.  Gates unchanged: 4.06% val / 3.70% test.
+- Reports: `lf-screen4k-ens4` / `lf-validation-ens4` .late-fusion-eval-report.json in
+  `data/models/openfs-recognizer-gaps-full-cosine-ema/`.
