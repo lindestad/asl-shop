@@ -79,7 +79,7 @@ export class RecognitionService {
     });
   }
 
-  analyze(dataUrl, video = false) {
+  analyze(dataUrl, video = false, options = {}) {
     if (
       typeof dataUrl !== "string" ||
       dataUrl.length > 24 * 1024 * 1024 ||
@@ -89,6 +89,19 @@ export class RecognitionService {
         new Error("Hand detection requires a PNG, JPEG, or WebP image under 18 MB."),
       );
     }
+    if (
+      video &&
+      (!options ||
+        typeof options.sessionId !== "string" ||
+        !options.sessionId.length ||
+        options.sessionId.length > 100 ||
+        !Number.isFinite(options.timestampMs) ||
+        (options.finish !== undefined && typeof options.finish !== "boolean"))
+    ) {
+      return Promise.reject(
+        new Error("Video recognition requires a session ID and capture timestamp."),
+      );
+    }
     if (!this.#child) this.#start();
     const id = ++this.#nextId;
     return new Promise((resolve, reject) => {
@@ -96,7 +109,16 @@ export class RecognitionService {
         this.stop(new Error("Hand detection timed out. Try again with a smaller image."));
       }, 60000);
       this.#pending.set(id, { resolve, reject, timer });
-      this.#child.stdin.write(JSON.stringify({ id, dataUrl, video }) + "\n");
+      this.#child.stdin.write(
+        JSON.stringify({
+          id,
+          dataUrl,
+          video,
+          sessionId: options.sessionId,
+          timestampMs: options.timestampMs,
+          finish: options.finish,
+        }) + "\n",
+      );
     });
   }
 

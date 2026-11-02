@@ -1,0 +1,8 @@
+    pos = wrist / size=>    # MediaPipe z is in image-width units; ~2000 px wide FSboard frames (app: real width)
+    zrel = (xyz[..., 2] - xyz[..., :1, 2]) * 2000.0 / size
+    zrel = zrel.clamp(-4, 4)
+    pos = wrist / size
+====
+    feats = torch.cat([shape, pos.clamp(-32, 32) * 0.1, vel.clamp(-4, 4), torch.ones_like(m)], -1) * m=>    feats = torch.cat([shape, zrel, pos.clamp(-32, 32) * 0.1, vel.clamp(-4, 4), torch.ones_like(m)], -1) * m
+====
+        n_in = 42 + 2 + 2 + 1=>        n_in = 42 + 21 + 2 + 2 + 1

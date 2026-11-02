@@ -3,6 +3,11 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+const sampleImage = path.resolve(
+  process.env.ASL_SHOP_TEST_DATA_ROOT || "data",
+  "asl_alphabet_train/asl_alphabet_train/A/A1000.jpg",
+);
+
 declare global {
   interface Window {
     cameraTest: {
@@ -13,27 +18,30 @@ declare global {
 }
 
 test.beforeEach(() => {
-  const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
+  const sample = sampleImage;
   test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration tests.");
   if (!process.env.ASL_SHOP_TEST_APP) {
     expect(
-      existsSync(path.resolve("data/knn.pkl")),
-      "Train the classifier with model/knn.py first.",
+      existsSync(path.resolve("data/knn.pkl")) ||
+        existsSync(path.resolve(process.env.ASL_HANDSHAPE_MODEL || "data/handshape.pt")),
+      "Train a neural handshape model or the KNN classifier first.",
     ).toBe(true);
   }
 });
 
 test("Electron recognizes a letter from an image with the trained model", async () => {
-  const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
+  const sample = sampleImage;
   test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration test.");
   const application = await electron.launch({
     executablePath: process.env.ASL_SHOP_TEST_APP,
-    args: process.env.ASL_SHOP_TEST_APP ? [] : ["."],
+    args: process.env.ASL_SHOP_TEST_APP ? ["--disable-gpu"] : ["--disable-gpu", "."],
     env: { ...process.env, ASL_DEV_URL: "http://127.0.0.1:5173" },
   });
   try {
     const page = await application.firstWindow();
-    await page.waitForLoadState("domcontentloaded");
+    await expect(page.getByRole("heading", { name: "Live kamera" })).toBeVisible({
+      timeout: 45000,
+    });
     await application.evaluate(({ dialog }, filename) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
     }, sample);
@@ -43,7 +51,9 @@ test("Electron recognizes a letter from an image with the trained model", async 
     await expect(page.getByRole("img", { name: "A1000.jpg" })).toBeVisible();
     await expect(page.getByText("1 hånd funnet")).toBeVisible({ timeout: 45000 });
     await expect(page.locator(".result-letter")).toHaveText("A");
-    await expect(page.getByText("5 av 5 nærmeste treningseksempler")).toBeVisible();
+    await expect(
+      page.getByText(/5 av 5 nærmeste treningseksempler|Nevral bokstavmodell/),
+    ).toBeVisible();
     expect(
       await page.evaluate(() => typeof (window as unknown as { require?: unknown }).require),
     ).toBe("undefined");
@@ -54,16 +64,18 @@ test("Electron recognizes a letter from an image with the trained model", async 
 });
 
 test("camera recognizes letters, keeps up with video, finds new hands, and restarts", async () => {
-  const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
+  const sample = sampleImage;
   test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration test.");
   const application = await electron.launch({
     executablePath: process.env.ASL_SHOP_TEST_APP,
-    args: process.env.ASL_SHOP_TEST_APP ? [] : ["."],
+    args: process.env.ASL_SHOP_TEST_APP ? ["--disable-gpu"] : ["--disable-gpu", "."],
     env: { ...process.env, ASL_DEV_URL: "http://127.0.0.1:5173" },
   });
   try {
     const page = await application.firstWindow();
-    await page.waitForLoadState("domcontentloaded");
+    await expect(page.getByRole("heading", { name: "Live kamera" })).toBeVisible({
+      timeout: 45000,
+    });
     const base64 = (await readFile(sample)).toString("base64");
     await page.evaluate(async (encoded) => {
       const image = new Image();

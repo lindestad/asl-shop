@@ -1,0 +1,45 @@
+class Recognizer(nn.Module):=>class LocalAttention(nn.Module):
+    """Causal sliding-window self-attention: frame t attends to t-W+1..t. Computed per chunk of W
+    queries against [previous chunk, own chunk] keys, so cost is linear in T."""
+    def __init__(self, dim, window, heads=4):
+        super().__init__()
+        self.window, self.heads = window, heads
+        self.norm = nn.LayerNorm(dim)
+        self.qkv = nn.Linear(dim, 3 * dim)
+        self.proj = nn.Linear(dim, dim)
+        self.drop = nn.Dropout(DROPOUT)
+        self.norm2 = nn.LayerNorm(dim)
+        self.ff = nn.Sequential(nn.Linear(dim, 2 * dim), nn.GELU(), nn.Dropout(DROPOUT), nn.Linear(2 * dim, dim))
+        q = torch.arange(window)[:, None]
+        k = torch.arange(2 * window)[None] - window
+        self.register_buffer("mask", (k <= q) & (k > q - window), persistent=False)
+
+    def forward(self, x):
+        B, T, C = x.shape
+        W, Hh = self.window, self.heads
+        pad = -T % W
+        h = F.pad(self.norm(x), (0, 0, 0, pad))
+        n = h.shape[1] // W
+        q, k, v = self.qkv(h).view(B, n, W, 3, Hh, C // Hh).permute(3, 0, 1, 4, 2, 5)   # (B,n,H,W,d)
+        def with_prev(t):
+            return torch.cat([F.pad(t, (0, 0, 0, 0, 0, 0, 1, 0))[:, :-1], t], 3)       # (B,n,H,2W,d)
+        out = F.scaled_dot_product_attention(q, with_prev(k), with_prev(v), attn_mask=self.mask)
+        out = out.permute(0, 1, 3, 2, 4).reshape(B, n * W, C)[:, :T]
+        x = x + self.drop(self.proj(out))
+        return x + self.drop(self.ff(self.norm2(x)))
+
+
+class Recognizer(nn.Module):
+====
+        self.blocks = nn.ModuleList(CausalBlock(HIDDEN, KERNEL, d) for d in DILATIONS)=>        blocks = []
+        for i, d in enumerate(DILATIONS):
+            blocks.append(CausalBlock(HIDDEN, KERNEL, d))
+            if i in ATTN_AFTER:
+                blocks.append(LocalAttention(HIDDEN, ATTN_WINDOW))
+        self.blocks = nn.ModuleList(blocks)
+====
+        receptive = 1 + sum((KERNEL - 1) * d for d in DILATIONS)=>        receptive = 1 + sum((KERNEL - 1) * d for d in DILATIONS) + len(ATTN_AFTER) * (ATTN_WINDOW - 1)
+====
+DROPOUT = 0.1=>DROPOUT = 0.1
+ATTN_WINDOW = 64
+ATTN_AFTER = (3, 7)           # insert a local attention block after these conv blocks

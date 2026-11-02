@@ -14,3 +14,6 @@ dependencies = [
 
 [tool.uv]
 package = false
+
+[project.optional-dependencies]
+neural = ["torch>=2.7", "PyYAML>=6.0"]

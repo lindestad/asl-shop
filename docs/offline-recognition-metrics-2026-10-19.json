@@ -1,0 +1,193 @@
+{
+  "generated": "2026-10-19",
+  "dataset": {
+    "pack": "data/openfs-packed",
+    "contract": "asl-shop-xy-wrist-v2",
+    "split": "test",
+    "clips": 12521,
+    "characters": 221100
+  },
+  "hardware": {
+    "gpu": "Tesla V100-SXM3-32GB",
+    "torch": "2.9.1+cu126",
+    "autocast": "fp16 + GradScaler (sm_70 has no bf16 tensor cores)",
+    "runner": "coder workspace mvision (asl-v100)"
+  },
+  "reference": [
+    {
+      "row": "paper published",
+      "source": "arXiv 2602.22949, FSboard test split, greedy AR, no language model",
+      "cer": 0.06286748,
+      "letter_accuracy": 0.93713252,
+      "exact_sequence_accuracy": 0.59324335,
+      "provenance": "as reported by the authors and quoted in docs/training-results-2026-10-12.md"
+    },
+    {
+      "row": "released checkpoint, measured 2026-10-12",
+      "report": "data/openfs-reference.report.json",
+      "cer": 0.06286748,
+      "letter_accuracy": 0.93713252,
+      "exact_sequence_accuracy": 0.59324335,
+      "scripts": [
+        "scripts/evaluate_openfs_reference.py"
+      ]
+    },
+    {
+      "row": "released checkpoint, re-measured 2026-10-19 through the transfer harness",
+      "report": "data/transfer-teacher.report.json",
+      "checkpoint": "/home/coder/asl-data/openfs-checkpoints/recognizer_fsboard/best_model.pth",
+      "clips": 12521,
+      "characters": 221100,
+      "cer": 0.06292175,
+      "letter_accuracy": 0.93707825,
+      "exact_sequence_accuracy": 0.59356281,
+      "deletions": 4252,
+      "substitutions": 5286,
+      "insertions": 4374,
+      "seconds": 4083.1,
+      "peak_vram_mib": 76
+    }
+  ],
+  "retrained": [
+    {
+      "representation": "compressed",
+      "input_dim": 42,
+      "checkpoint": "data/models/openfs-recognizer-compressed/recognizer.pt",
+      "checkpoint_sha256": "9c16eef2e4cbf0f6a179ba735dc1e0c00991e7c0b7581a13b6688bc3088cef21",
+      "parameters": 8815804,
+      "best_validation_cer": 0.06572183,
+      "test_cer": 0.07006332,
+      "test_letter_accuracy": 0.92993668,
+      "test_exact_sequence_accuracy": 0.56616884,
+      "errors": 15491,
+      "exact_clips": 7089,
+      "epochs": 100,
+      "training_seconds": 43423,
+      "peak_vram_mib": 5856,
+      "report": "data/models/openfs-recognizer-compressed/recognizer.report.json",
+      "evaluation_report": "data/models/openfs-recognizer-compressed/test-eval.eval-report.json"
+    },
+    {
+      "representation": "gaps",
+      "input_dim": 91,
+      "checkpoint": "data/models/openfs-recognizer-gaps/recognizer.pt",
+      "checkpoint_sha256": "a004322167775bee849ad0d2a4c21328d3c0d9ba619c62da36dba158d95d9e6a",
+      "parameters": 8828348,
+      "best_validation_cer": 0.07078715,
+      "test_cer": 0.06502035,
+      "test_letter_accuracy": 0.93497965,
+      "test_exact_sequence_accuracy": 0.58086415,
+      "errors": 14376,
+      "exact_clips": 7273,
+      "epochs": 100,
+      "training_seconds": 39445,
+      "peak_vram_mib": 7599,
+      "report": "data/models/openfs-recognizer-gaps/recognizer.report.json",
+      "evaluation_report": "data/models/openfs-recognizer-gaps/test-eval.eval-report.json"
+    },
+    {
+      "representation": "wrist2d",
+      "input_dim": 42,
+      "checkpoint": "data/models/openfs-recognizer-wrist2d/recognizer.pt",
+      "checkpoint_sha256": "83a8f718b09dce9ab928a083018291ccced9914785abe586feaedc6ec3ce9a24",
+      "parameters": 8815804,
+      "best_validation_cer": 0.06983988,
+      "test_cer": 0.06589778,
+      "test_letter_accuracy": 0.93410222,
+      "test_exact_sequence_accuracy": 0.58437824,
+      "errors": 14570,
+      "exact_clips": 7317,
+      "epochs": 100,
+      "training_seconds": 39063,
+      "peak_vram_mib": 7569,
+      "report": "data/models/openfs-recognizer-wrist2d/recognizer.report.json",
+      "evaluation_report": "data/models/openfs-recognizer-wrist2d/test-eval.eval-report.json"
+    }
+  ],
+  "reading": {
+    "timeline_at_42_channels": {
+      "compressed_cer": 0.07006332,
+      "wrist2d_cer": 0.06589778,
+      "cer_points_improvement": 0.42
+    },
+    "extra_channels_on_gaps_timeline": {
+      "wrist2d_cer": 0.06589778,
+      "gaps_cer": 0.06502035,
+      "cer_points_improvement": 0.09
+    },
+    "best_retrained_vs_released": {
+      "released_cer": 0.06292175,
+      "gaps_cer": 0.06502035,
+      "cer_points_shortfall": 0.21,
+      "exact_top1_points_shortfall": 1.27
+    },
+    "seeds": 1,
+    "note": "one seed per representation; differences under about half a CER point are not separated by this experiment"
+  },
+  "app_path_context": {
+    "shipped_causal_head_greedy_ctc_cer": 0.1354,
+    "shipped_causal_head_beam_plus_char_lm_fusion_cer": 0.1047,
+    "source": [
+      "data/lm-rescoring-vps.report.json",
+      "docs/streaming-latency-2026-10-19.md"
+    ],
+    "chunked_offline_decode": {
+      "subset": {
+        "clips": 2000,
+        "selection": "seed42 random subset of the test split",
+        "characters": 34819
+      },
+      "full_clip": {
+        "cer": 0.0646,
+        "exact_sequence_accuracy": 0.59
+      },
+      "chunked": {
+        "cer": 0.0753,
+        "exact_sequence_accuracy": 0.547,
+        "chunk_frames": 300,
+        "chunk_overlap": 0.5,
+        "insertion_change": 366
+      },
+      "by_window_count": [
+        {
+          "windows": 1,
+          "clips": 1791,
+          "cer": 0.06503628,
+          "exact_sequence_accuracy": 0.60134003
+        },
+        {
+          "windows": 2,
+          "clips": 195,
+          "cer": 0.1227,
+          "exact_sequence_accuracy": 0.0872
+        },
+        {
+          "windows": 3,
+          "clips": 13,
+          "cer": 0.2767,
+          "exact_sequence_accuracy": 0.0
+        },
+        {
+          "windows": 4,
+          "clips": 1,
+          "cer": 1.125,
+          "exact_sequence_accuracy": 0.0
+        }
+      ],
+      "single_window_agreement": {
+        "clips": 1791,
+        "identical_to_full_clip": 1791
+      },
+      "source": "data/transfer-teacher.report.json",
+      "note": "the chunker is lossless; the autoregressive decoder is what degrades"
+    }
+  },
+  "license": {
+    "checkpoints": "research-only, OpenFS Non-Commercial Research License covers the released weights and everything fit on FSboard data",
+    "note": "none of the checkpoints in this file may be shipped in the app; nothing here is wired into the packaged backend"
+  },
+  "reproduce": [
+    "scripts/train_openfs_recognizer.py --data data/openfs-packed --input-representation {compressed,gaps,wrist2d} --output data/models/openfs-recognizer-<name>/recognizer.pt",
+    "scripts/train_openfs_recognizer.py --data data/openfs-packed --input-representation <name> --output data/models/openfs-recognizer-<name>/test-eval.pt --resume data/models/openfs-recognizer-<name>/recognizer.pt --evaluate-only --evaluate-splits test"
+  ]
+}

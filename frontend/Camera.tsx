@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, CameraOff, LoaderCircle } from "lucide-react";
-import { LandmarkOverlay, RecognitionSummary } from "./components";
+import { FingerspellingSummary, LandmarkOverlay, RecognitionSummary } from "./components";
 import type { Recognition } from "./types";
 
 export default function CameraView() {
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
   const session = useRef(0);
+  const textSession = useRef(crypto.randomUUID());
+  const finishRequested = useRef(false);
   const [running, setRunning] = useState(false);
   const [starting, setStarting] = useState(false);
   const [result, setResult] = useState<Recognition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
   const [fps, setFps] = useState(0);
+
+  function newText() {
+    textSession.current = crypto.randomUUID();
+    finishRequested.current = false;
+    setResult(null);
+  }
 
   function stop() {
     session.current++;
@@ -38,6 +46,7 @@ export default function CameraView() {
       return;
     }
     const current = ++session.current;
+    newText();
     setStarting(true);
     setError(null);
     try {
@@ -91,17 +100,19 @@ export default function CameraView() {
         canvas.width = width;
         canvas.height = Math.round(element.videoHeight * (width / element.videoWidth));
         context.drawImage(element, 0, 0, canvas.width, canvas.height);
+        const segmentId = textSession.current;
         const recognition = await window.desktop!.recognizeFrame(
           canvas.toDataURL("image/jpeg", 0.85),
+          { sessionId: segmentId, timestampMs: performance.now(), finish: finishRequested.current },
         );
-        if (!canceled) {
+        if (!canceled && segmentId === textSession.current) {
           setResult(recognition);
           setError(null);
           const now = performance.now();
           if (!sampleStarted) sampleStarted = now;
           else completedFrames++;
           if (now - sampleStarted >= 1000) {
-            setFps(Math.round(completedFrames * 1000 / (now - sampleStarted)));
+            setFps(Math.round((completedFrames * 1000) / (now - sampleStarted)));
             completedFrames = 0;
             sampleStarted = now;
           }
@@ -166,7 +177,10 @@ export default function CameraView() {
             <span>
               {running ? "Håndanalyse kjører lokalt" : "Ingen video tas opp eller lagres"}
               {running && window.desktop && (
-                <> · <span aria-label="Tracking frame rate">{fps} FPS</span></>
+                <>
+                  {" "}
+                  · <span aria-label="Tracking frame rate">{fps} FPS</span>
+                </>
               )}
             </span>
             <button
@@ -188,6 +202,24 @@ export default function CameraView() {
         </section>
         <aside className="result-column">
           <RecognitionSummary result={result} />
+          <FingerspellingSummary result={result} />
+          {running && result?.fingerspelling?.available && (
+            <div className="sequence-controls">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={result.fingerspelling.status === "finished"}
+                onClick={() => {
+                  finishRequested.current = true;
+                }}
+              >
+                Fullfør tekst
+              </button>
+              <button type="button" className="primary-button" onClick={newText}>
+                Ny sekvens
+              </button>
+            </div>
+          )}
           <div className="hint-card">
             <strong>For best resultat</strong>
             <p>Vis hele hånden i bildet. Bruk jevnt lys og en rolig bakgrunn.</p>

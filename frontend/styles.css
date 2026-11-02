@@ -417,3 +417,14 @@ h1 {
     min-height: 0;
   }
 }
+/* The sequence decoder reports the complete current segment, including revisions. */
+.spelled-text {
+  overflow-wrap: anywhere;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.sequence-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
