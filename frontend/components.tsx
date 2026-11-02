@@ -40,29 +40,29 @@ export function LandmarkOverlay({
 export function RecognitionSummary({ result }: { result: Recognition | null }) {
   return (
     <section className="result-card" aria-live="polite">
-      <span className="eyebrow">RESULTAT</span>
+      <span className="eyebrow">RESULT</span>
       {result?.prediction ? (
         <>
           <strong className="result-letter">{result.prediction.letter}</strong>
-          <p>{Math.round(result.prediction.confidence * 5)} av 5 nærmeste treningseksempler</p>
+          <p>{Math.round(result.prediction.confidence * 5)} of 5 nearest training examples</p>
         </>
       ) : (
         <>
-          <strong className="result-placeholder">Ingen bokstav ennå</strong>
+          <strong className="result-placeholder">No letter yet</strong>
           <p>
             {result?.hands.length
               ? result.classifierAvailable
-                ? "Hånd funnet, men ingen tydelig bokstav. Prøv en annen vinkel."
-                : "Hånd funnet. Bokstavmodellen er ikke tilgjengelig."
+                ? "Hand found, but no clear letter. Try another angle."
+                : "Hand found. The letter model is not available."
               : result
-                ? "Ingen hånd funnet. Prøv tydeligere lys og vis hele hånden."
-                : "Resultatet vises her når analysen starter."}
+                ? "No hand found. Try brighter light and show your whole hand."
+                : "The result appears here once analysis starts."}
           </p>
         </>
       )}
       {result && (
         <div className="result-meta">
-          {result.hands.length} {result.hands.length === 1 ? "hånd" : "hender"} funnet
+          {result.hands.length} {result.hands.length === 1 ? "hand" : "hands"} found
         </div>
       )}
     </section>

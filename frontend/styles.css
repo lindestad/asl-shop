@@ -41,15 +41,19 @@ input:focus-visible {
 }
 
 .app {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
 .app-header {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 24px;
-  min-height: 76px;
-  padding: 0 clamp(24px, 4vw, 64px);
+  flex: none;
+  min-height: 60px;
+  padding: 0 clamp(20px, 3vw, 48px);
   background: #fff;
   border-bottom: 1px solid #e6e9e9;
 }
@@ -71,31 +75,6 @@ input:focus-visible {
   background: #163c3d;
   color: #fff;
 }
-.tabs {
-  display: flex;
-  align-self: stretch;
-  gap: 28px;
-}
-.tabs button {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 0 4px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: #64747a;
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.tabs button:hover {
-  color: #163c3d;
-}
-.tabs button.active {
-  color: #163c3d;
-  border-bottom-color: #163c3d;
-}
 .app-label {
   justify-self: end;
   color: #869296;
@@ -106,16 +85,24 @@ input:focus-visible {
 }
 
 .page {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
   max-width: 1540px;
   margin: 0 auto;
-  padding: clamp(30px, 4vw, 56px) clamp(24px, 4vw, 64px) 64px;
+  padding: clamp(14px, 2.2vh, 28px) clamp(20px, 3vw, 48px);
+}
+.view {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: clamp(12px, 1.8vh, 20px);
+  height: 100%;
 }
 .view-heading {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 30px;
 }
 .eyebrow {
   display: block;
@@ -125,8 +112,8 @@ input:focus-visible {
   letter-spacing: 0.15em;
 }
 h1 {
-  margin: 9px 0 8px;
-  font-size: clamp(27px, 3vw, 38px);
+  margin: 0 0 4px;
+  font-size: clamp(22px, 2.4vw, 30px);
   font-weight: 650;
   letter-spacing: -0.055em;
   line-height: 1.12;
@@ -186,9 +173,9 @@ h1 {
 
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 290px;
-  align-items: start;
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) clamp(230px, 22vw, 290px);
+  gap: 20px;
+  min-height: 0;
 }
 .preview-card,
 .result-card,
@@ -199,21 +186,26 @@ h1 {
   box-shadow: 0 8px 30px rgba(31, 49, 52, 0.035);
 }
 .preview-card {
-  overflow: hidden;
-}
-.preview-stage {
-  position: relative;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 390px;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
-  background: #e9eeed;
 }
 .camera-stage {
-  aspect-ratio: 16 / 9;
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1;
   min-height: 0;
+  overflow: hidden;
   background: #162527;
+  container-type: size;
+}
+/* Largest box with the video's aspect ratio that fits the stage, so the overlay lines up. */
+.camera-frame {
+  position: relative;
+  width: min(100cqw, 100cqh * var(--ratio));
+  aspect-ratio: var(--ratio);
 }
 .camera-video {
   display: block;
@@ -221,18 +213,6 @@ h1 {
   height: 100%;
   object-fit: contain;
   transform: scaleX(-1);
-}
-.preview-image-frame {
-  position: relative;
-  display: inline-block;
-  max-width: 100%;
-  line-height: 0;
-}
-.preview-image-frame img {
-  display: block;
-  max-width: 100%;
-  max-height: min(68vh, 710px);
-  object-fit: contain;
 }
 .landmark-overlay {
   position: absolute;
@@ -286,21 +266,11 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-height: 68px;
-  padding: 12px 18px;
+  flex: none;
+  min-height: 60px;
+  padding: 10px 18px;
   color: #7d898d;
   font-size: 12px;
-}
-.filename {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.busy-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  white-space: nowrap;
 }
 .spin {
   animation: spin 1s linear infinite;
@@ -312,16 +282,20 @@ h1 {
 }
 
 .result-column {
-  display: grid;
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: hidden;
 }
 .result-card {
-  min-height: 235px;
-  padding: 23px;
+  flex: 1;
+  min-height: 0;
+  padding: 20px 22px;
 }
 .result-letter {
   display: block;
-  margin: 18px 0 4px;
+  margin: 12px 0 4px;
   color: #163c3d;
   font-size: 92px;
   font-weight: 600;
@@ -329,7 +303,7 @@ h1 {
 }
 .result-placeholder {
   display: block;
-  margin-top: 31px;
+  margin-top: 16px;
   font-size: 19px;
   font-weight: 650;
   line-height: 1.25;
@@ -342,7 +316,7 @@ h1 {
   line-height: 1.55;
 }
 .result-meta {
-  margin-top: 20px;
+  margin-top: 16px;
   padding-top: 15px;
   border-top: 1px solid #edf0f0;
   color: #54716e;
@@ -350,7 +324,7 @@ h1 {
   font-weight: 650;
 }
 .hint-card {
-  padding: 20px 23px;
+  padding: 16px 22px;
 }
 .hint-card strong {
   font-size: 12px;
@@ -367,6 +341,93 @@ h1 {
   margin: 0;
   padding: 0 4px;
 }
+.scratchpad {
+  padding: 14px 20px 16px;
+  background: #fff;
+  border: 1px solid #e5e9e9;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(31, 49, 52, 0.035);
+}
+.scratchpad-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.scratchpad-header > div:first-child {
+  flex: 1;
+}
+.scratchpad-header p {
+  margin: 5px 0 0;
+  color: #738187;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.hold-indicator {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+  min-width: 140px;
+  color: #738187;
+  font-size: 12px;
+}
+.hold-indicator strong {
+  color: #163c3d;
+}
+.hold-bar {
+  width: 140px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e9eeed;
+}
+.hold-bar span {
+  display: block;
+  height: 100%;
+  background: #26a77e;
+}
+.scratchpad-text {
+  box-sizing: border-box;
+  width: 100%;
+  height: clamp(52px, 9vh, 96px);
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid #dfe6e6;
+  border-radius: 8px;
+  background: #fafcfc;
+  color: #163c3d;
+  font: inherit;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  resize: none;
+}
+.scratchpad-text:focus {
+  outline: 2px solid #b5d9cf;
+  border-color: #8fc2b4;
+}
+.scratchpad-actions {
+  display: flex;
+  gap: 8px;
+}
+.ghost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d6dfdf;
+  border-radius: 8px;
+  background: #fff;
+  color: #163c3d;
+  font-size: 12px;
+  font-weight: 650;
+}
+.ghost-button:hover:not(:disabled) {
+  background: #f1f5f5;
+}
+.ghost-button:disabled {
+  opacity: 0.45;
+}
 .error {
   margin: 0;
   padding: 12px 14px;
@@ -378,19 +439,37 @@ h1 {
   line-height: 1.5;
 }
 
-@media (max-width: 900px) {
+@media (max-height: 760px) {
+  .hint-card {
+    display: none;
+  }
+  .result-letter {
+    font-size: 72px;
+  }
+}
+@media (max-width: 1100px) {
+  .scratchpad-header p {
+    display: none;
+  }
+}
+/* Phones can't fit the camera, result and scratchpad at once, so let the page scroll. */
+@media (max-width: 620px) {
+  .app {
+    height: auto;
+    overflow: visible;
+  }
+  .view {
+    grid-template-rows: auto;
+  }
   .content-grid {
     grid-template-columns: 1fr;
   }
-  .result-column {
-    grid-template-columns: 1fr 1fr;
+  .camera-stage {
+    height: 56vw;
   }
-  .result-column .note,
-  .result-column .error {
-    grid-column: 1 / -1;
+  .scratchpad-header {
+    flex-wrap: wrap;
   }
-}
-@media (max-width: 620px) {
   .app-header {
     grid-template-columns: 1fr;
     gap: 0;
@@ -399,21 +478,8 @@ h1 {
   .app-label {
     display: none;
   }
-  .tabs {
-    gap: 24px;
-    min-height: 52px;
-  }
   .view-heading {
     align-items: start;
     flex-direction: column;
-  }
-  .result-column {
-    grid-template-columns: 1fr;
-  }
-  .preview-stage {
-    min-height: 260px;
-  }
-  .camera-stage {
-    min-height: 0;
   }
 }
