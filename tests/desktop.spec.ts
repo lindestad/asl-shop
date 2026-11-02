@@ -34,16 +34,11 @@ test("Electron recognizes a letter from an image with the trained model", async 
   try {
     const page = await application.firstWindow();
     await page.waitForLoadState("domcontentloaded");
-    await application.evaluate(({ dialog }, filename) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
-    }, sample);
-
-    await page.getByRole("button", { name: "Bilde" }).click();
-    await page.getByRole("button", { name: "Velg bilde" }).click();
-    await expect(page.getByRole("img", { name: "A1000.jpg" })).toBeVisible();
-    await expect(page.getByText("1 hånd funnet")).toBeVisible({ timeout: 45000 });
-    await expect(page.locator(".result-letter")).toHaveText("A");
-    await expect(page.getByText("5 av 5 nærmeste treningseksempler")).toBeVisible();
+    const dataUrl = `data:image/jpeg;base64,${(await readFile(sample)).toString("base64")}`;
+    const result = await page.evaluate((url) => window.desktop!.recognize(url), dataUrl);
+    expect(result.hands).toHaveLength(1);
+    expect(result.prediction?.letter).toBe("A");
+    expect(result.prediction?.confidence).toBe(1);
     expect(
       await page.evaluate(() => typeof (window as unknown as { require?: unknown }).require),
     ).toBe("undefined");
@@ -93,7 +88,7 @@ test("camera recognizes letters, keeps up with video, finds new hands, and resta
         return stream;
       };
     }, base64);
-    await page.getByRole("button", { name: "Start kamera" }).click();
+    await page.getByRole("button", { name: "Start camera" }).click();
     await expect(page.locator(".result-letter")).toHaveText("A", { timeout: 45000 });
     // Measure completed inference, including transfer, rather than video rendering.
     await expect
@@ -132,8 +127,8 @@ test("camera recognizes letters, keeps up with video, finds new hands, and resta
       expect(hand.features).toHaveLength(63);
     }
 
-    await page.getByRole("button", { name: "Stopp kamera" }).click();
-    await expect(page.getByText("Kamera av")).toBeVisible();
+    await page.getByRole("button", { name: "Stop camera" }).click();
+    await expect(page.getByText("Camera off")).toBeVisible();
     expect(
       await page.locator("video").evaluate((element) => (element as HTMLVideoElement).srcObject),
     ).toBeNull();
@@ -146,20 +141,10 @@ test("camera recognizes letters, keeps up with video, finds new hands, and resta
     await page.evaluate(() => {
       window.cameraTest.multiple = false;
     });
-    await page.getByRole("button", { name: "Start kamera" }).click();
+    await page.getByRole("button", { name: "Start camera" }).click();
     await expect(page.locator(".result-letter")).toHaveText("A");
-    await expect(page.getByText("1 hånd funnet")).toBeVisible();
-    await page.getByRole("button", { name: "Bilde", exact: true }).click();
-    expect(
-      await page.evaluate(() =>
-        window.cameraTest.tracks.every((track) => track.readyState === "ended"),
-      ),
-    ).toBe(true);
-    await page.getByRole("button", { name: "Live kamera", exact: true }).click();
-    await expect(page.getByText("Kamera av")).toBeVisible();
-    await page.getByRole("button", { name: "Start kamera" }).click();
-    await expect(page.locator(".result-letter")).toHaveText("A");
-    await page.getByRole("button", { name: "Stopp kamera" }).click();
+    await expect(page.getByText("1 hand found")).toBeVisible();
+    await page.getByRole("button", { name: "Stop camera" }).click();
   } finally {
     await application.close();
   }

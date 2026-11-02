@@ -55,11 +55,11 @@ handle("images:open", async () => {
   if (result.canceled || !result.filePaths[0]) return null;
   const filename = result.filePaths[0];
   if ((await stat(filename)).size > 16 * 1024 * 1024)
-    throw new Error("Bildet må være mindre enn 16 MB.");
+    throw new Error("The image must be smaller than 16 MB.");
   const mime = { ".png": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".webp": "webp" }[
     path.extname(filename).toLowerCase()
   ];
-  if (!mime) throw new Error("Ugyldig bildeformat.");
+  if (!mime) throw new Error("Unsupported image format.");
   return {
     name: path.basename(filename),
     dataUrl: `data:image/${mime};base64,${(await readFile(filename)).toString("base64")}`,
@@ -74,7 +74,7 @@ async function createWindow() {
     height: 840,
     minWidth: 760,
     minHeight: 600,
-    title: "ASL Shop",
+    title: "ASL alphabet recognition",
     icon: path.join(root, "assets", "icon.png"),
     backgroundColor: "#fafafa",
     autoHideMenuBar: true,
