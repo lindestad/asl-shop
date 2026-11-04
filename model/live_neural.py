@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 from model.timeline import TimelineResampler
+from model.ensemble_refiner import EnsembleRefiner
 from model.openfs_refiner import OpenFSRefiner
 
 
@@ -18,6 +19,7 @@ class NeuralRuntime:
         self.errors = {}
         self.loaded = False
         self.refiner = OpenFSRefiner()
+        self.ensemble = EnsembleRefiner()
         self.reset()
 
     def load(self):
@@ -90,7 +92,18 @@ class NeuralRuntime:
         self.finished = True
         self.text = self.gate_text(self.text)
         count, duration, movement, maximum = self.spelling_context()
-        if self.refiner.enabled and count >= 6 and duration >= 500 and movement:
+        if not count >= 6 or not duration >= 500 or not movement:
+            return
+        if self.ensemble.enabled:
+            try:
+                text = self.ensemble.refine(self.model_frames)
+                if len(text) > maximum:
+                    raise ValueError("Ensemble output is too long for the observed spelling duration.")
+                self.text = text
+                self.method = "ensemble"
+            except Exception as error:
+                self.refinement_error = str(error)
+        elif self.refiner.enabled:
             try:
                 text = self.refiner.refine({0: self.raw_hands["Right"]}, {0: self.raw_hands["Left"]})
                 if len(text) > maximum:
@@ -102,6 +115,7 @@ class NeuralRuntime:
 
     def sequence_metadata(self):
         return {"method": self.method, "refiner": self.refiner.readiness(),
+                "ensemble": self.ensemble.readiness(),
                 "contextStatus": self.context_status,
                 **({"contextMessage": self.context_message} if self.context_message else {}),
                 **({"refinementError": self.refinement_error} if self.refinement_error else {})}
