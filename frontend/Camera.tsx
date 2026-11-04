@@ -79,14 +79,18 @@ export default function CameraView() {
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d")!;
     let canceled = false;
-    let busy = false;
+    // Keep a second frame queued so the next JPEG is encoded and sent while the
+    // worker is still processing the previous one. With a single frame in
+    // flight, a round trip slightly over one camera frame skips every other frame.
+    const maxInFlight = 2;
+    let inFlight = 0;
     let callback = 0;
     let completedFrames = 0;
     let sampleStarted = 0;
 
     async function analyzeFrame() {
-      if (busy || !element.videoWidth) return;
-      busy = true;
+      if (inFlight >= maxInFlight || !element.videoWidth) return;
+      inFlight++;
       try {
         const width = Math.min(640, element.videoWidth);
         canvas.width = width;
@@ -114,7 +118,7 @@ export default function CameraView() {
           element.cancelVideoFrameCallback(callback);
         }
       } finally {
-        busy = false;
+        inFlight--;
       }
     }
 
