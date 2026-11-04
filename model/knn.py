@@ -1,49 +1,43 @@
-"""Train the runtime classifier from locally extracted hand landmarks."""
-
-import argparse
+from sklearn.model_selection import train_test_split, cross_val_score 
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score
+import pandas as pd
 from pathlib import Path
 import pickle
-
-import numpy as np
-import pandas as pd
-from sklearn.metrics import accuracy_score
-from sklearn.model_selection import train_test_split
-from sklearn.neighbors import KNeighborsClassifier
-
-ROOT = Path(__file__).resolve().parents[1]
-FEATURE_COLUMNS = [f"{axis}{i}" for i in range(21) for axis in "xyz"]
+import numpy as np 
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, default=ROOT / "data" / "extracted_landmarks.csv")
-    parser.add_argument("--output", type=Path, default=ROOT / "data" / "knn.pkl")
-    args = parser.parse_args()
-    if not args.input.is_file():
-        parser.error(f"Missing landmarks: {args.input}. Run uv run python load_data.py first.")
+project_root = Path(__file__).resolve().parents[3]
+data_path = project_root / 'data'
+models = Path(__file__).resolve().parent
+model_path = models / 'trained_models'
 
-    df = pd.read_csv(args.input)
-    if list(df.columns) != ["label", *FEATURE_COLUMNS]:
-        parser.error("Expected a label column followed by 63 coordinates in x0,y0,z0,... order.")
-    features = df[FEATURE_COLUMNS].to_numpy(dtype=np.float64)
-    if df["label"].isna().any() or not np.isfinite(features).all():
-        parser.error("Labels and coordinates must not contain missing or non-finite values.")
-    if len(df) < 8:
-        parser.error("At least eight landmark rows are required for training and evaluation.")
+# Load extracted landmarks
+cols = ["label"] + [f"{axis}{i}" for i in range(21) for axis in "xyz"]
+df = pd.read_csv(data_path / "extractedLandmarks.csv", header=None, names=cols) 
 
-    x_train, x_test, y_train, y_test = train_test_split(
-        features, df["label"].astype(str), test_size=0.3, random_state=42
-    )
-    classifier = KNeighborsClassifier(n_neighbors=5)
-    classifier.fit(x_train, y_train)
-    prediction = classifier.predict(x_test)
-    print(f"Training rows: {len(x_train)}; held-out rows: {len(x_test)}")
-    print(f"Held-out accuracy (k=5): {accuracy_score(y_test, prediction):.2%}")
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open("wb") as output:
-        pickle.dump(classifier, output)
-    print(f"Saved classifier to {args.output}")
+X = df.drop(columns="label")
+y = df["label"]
 
+# Cross validation testing 
+k_range = range(1, 21)
+cv_scores = []
 
-if __name__ == "__main__":
-    main()
+# Evaluate each k using 5-fold cross-validation
+
+# Split into train and test
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+# Train the k-NN classifier
+knn = KNeighborsClassifier(n_neighbors=5)
+knn.fit(X_train, y_train)
+
+# Predict and evaluate
+y_pred = knn.predict(X_test)
+print(f"Test Accuracy (k=5): {accuracy_score(y_test, y_pred):.2f}")
+
+print(df["label"].unique())
+print(df["label"].nunique())
+
+with open(model_path / "knn_model.pkl", "wb") as f:
+    pickle.dump(knn, f)
