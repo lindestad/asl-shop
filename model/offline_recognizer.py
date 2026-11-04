@@ -112,16 +112,17 @@ class Recognizer(nn.Module):
 
     def encode(self,poses,segments,positions):
         padding=segments==PAD_SEG
-        embedding=(self.pose_embedding(poses)
-                   +positional_encoding_from_idx(positions,self.d_model)
-                   +positional_encoding_from_idx(segments,self.d_model))
+        embedding=self.pose_embedding(poses)
+        # positional encodings follow the embedding dtype so half-precision checkpoints work
+        embedding=embedding+positional_encoding_from_idx(positions,self.d_model).to(embedding.dtype)
+        embedding=embedding+positional_encoding_from_idx(segments,self.d_model).to(embedding.dtype)
         return self.encoder(embedding,src_key_padding_mask=padding),padding
 
     def decode(self,memory,padding,inputs):
         length=inputs.shape[1]
         causal=torch.triu(torch.ones(length,length,dtype=torch.bool,device=inputs.device),diagonal=1)
-        x=(self.char_embedding(inputs)
-           +positional_encoding_from_idx(torch.arange(length,device=inputs.device),self.d_model).unsqueeze(0))
+        x=self.char_embedding(inputs)
+        x=x+positional_encoding_from_idx(torch.arange(length,device=inputs.device),self.d_model).to(x.dtype).unsqueeze(0)
         weights=[]
         for layer in self.decoder:
             x,layer_weights=layer(x,memory,causal,inputs==PAD_CHAR,padding)
