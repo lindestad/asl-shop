@@ -6,8 +6,7 @@ from pathlib import Path
 import pickle
 import numpy as np 
 
-
-project_root = Path(__file__).resolve().parents[3]
+project_root = Path(__file__).resolve().parents[1]
 data_path = project_root / 'data'
 models = Path(__file__).resolve().parent
 model_path = models / 'trained_models'
@@ -29,7 +28,7 @@ cv_scores = []
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
 # Train the k-NN classifier
-knn = KNeighborsClassifier(n_neighbors=5)
+knn = KNeighborsClassifier(n_neighbors=1)
 knn.fit(X_train, y_train)
 
 # Predict and evaluate

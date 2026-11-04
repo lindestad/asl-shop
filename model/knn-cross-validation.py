@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm 
 
 
-project_root = Path(__file__).resolve().parents[3]
+project_root = Path(__file__).resolve().parents[1]
 data_path = project_root / 'data'
 models = Path(__file__).resolve().parent
 model_path = models / 'trained_models'
