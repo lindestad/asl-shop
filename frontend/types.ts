@@ -23,13 +23,20 @@ export type Recognition = {
     frames: number;
     modelFrames?: number;
     error?: string;
-    method?: "causal-tcn" | "openfs";
+    method?: "causal-tcn" | "openfs" | "ensemble";
     refinementError?: string;
     contextStatus?: "collecting" | "spelling" | "held-letter" | "insufficient-context";
     contextMessage?: string;
     refiner?: {
       enabled: boolean;
       available: boolean;
+      status: "disabled" | "configured" | "ready" | "error";
+      error?: string;
+    };
+    ensemble?: {
+      enabled: boolean;
+      available: boolean;
+      members?: number;
       status: "disabled" | "configured" | "ready" | "error";
       error?: string;
     };

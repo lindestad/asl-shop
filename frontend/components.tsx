@@ -92,10 +92,26 @@ export function FingerspellingSummary({ result }: { result: Recognition | null }
           : "Tekstmodellen er ikke tilgjengelig ennå."}
       </p>
       {sequence?.method && (
-        <p>{sequence.method === "openfs" ? "OpenFS · ferdig tekst" : "Nevral sekvensmodell"}</p>
+        <p>
+          {sequence.method === "ensemble"
+            ? "Ensemble-sluttanalyse · ferdig tekst"
+            : sequence.method === "openfs"
+              ? "OpenFS · ferdig tekst"
+              : "Nevral sekvensmodell"}
+        </p>
       )}
       {sequence?.contextMessage && <p>{sequence.contextMessage}</p>}
-      {sequence?.refiner?.enabled && sequence.provisional && (
+      {sequence?.ensemble?.enabled && sequence.provisional && (
+        <p>
+          Ensemble-sluttanalyse:{" "}
+          {sequence.ensemble.status === "ready"
+            ? "klar"
+            : sequence.ensemble.status === "configured"
+              ? "konfigurert – lastes ved fullføring"
+              : "ikke tilgjengelig"}
+        </p>
+      )}
+      {sequence?.refiner?.enabled && !sequence?.ensemble?.enabled && sequence.provisional && (
         <p>
           OpenFS sluttanalyse:{" "}
           {sequence.refiner.status === "ready"
@@ -107,7 +123,7 @@ export function FingerspellingSummary({ result }: { result: Recognition | null }
       )}
       {sequence?.refinementError && (
         <p className="error">
-          OpenFS sluttanalyse mislyktes. Foreløpig tekst beholdes: {sequence.refinementError}
+          Sluttanalyse mislyktes. Foreløpig tekst beholdes: {sequence.refinementError}
         </p>
       )}
       {sequence?.error && <p className="error">{sequence.error}</p>}
