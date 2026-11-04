@@ -57,6 +57,13 @@ test("types held signs into the scratchpad", async ({ page }) => {
         classifierAvailable: true,
         prediction: { letter: state.sign, confidence: 1 },
       }),
+      recognizeLandmarks: async () => {
+        throw new Error("unused landmark request");
+      },
+      demoList: async () => [],
+      demoClip: async () => {
+        throw new Error("unused clip request");
+      },
     };
   });
   await page.goto("/");
@@ -113,13 +120,20 @@ test("shows independent neural letter and sequence outputs, finishes and resets 
           provisional: !options.finish,
         },
       }),
+      recognizeLandmarks: async () => {
+        throw new Error("Unused landmark request");
+      },
+      demoList: async () => [],
+      demoClip: async () => {
+        throw new Error("Unused clip request");
+      },
     };
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Start kamera" }).click();
+  await page.getByRole("button", { name: "Start camera" }).click();
   await expect(page.locator(".result-letter")).toHaveText("B");
   await expect(page.locator(".spelled-text")).toHaveText("AAB");
-  await expect(page.getByText("Nevral bokstavmodell", { exact: false })).toBeVisible();
+  await expect(page.getByText("Neural letter model", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Fullfør tekst" }).click();
   await expect(page.getByText("Sekvensen er ferdig.")).toBeVisible();
   await page.getByRole("button", { name: "Ny sekvens" }).click();

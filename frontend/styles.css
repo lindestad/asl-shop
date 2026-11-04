@@ -494,3 +494,32 @@ h1 {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+.replay-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 14px 20px;
+  background: #fff;
+  border: 1px solid #e5e9e9;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(31, 49, 52, 0.035);
+}
+.replay-card .replay-copy {
+  flex: 1;
+}
+.replay-card p {
+  margin: 5px 0 0;
+  color: #738187;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.replay-card select {
+  padding: 8px 10px;
+  border: 1px solid #d8dedd;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f3134;
+  font: inherit;
+  font-size: 13px;
+}

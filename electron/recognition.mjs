@@ -1,7 +1,10 @@
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 export class RecognitionService {
   #child = null;
@@ -25,12 +28,7 @@ export class RecognitionService {
       );
       args = [];
     } else {
-      const venv = path.join(
-        this.root,
-        ".venv",
-        process.platform === "win32" ? "Scripts/python.exe" : "bin/python",
-      );
-      executable = process.env.ASL_SHOP_PYTHON || (existsSync(venv) ? venv : "python3");
+      executable = this.#python();
       args = [path.join(this.root, "scripts", "recognition_worker.py")];
     }
     const child = spawn(executable, args, {
@@ -114,6 +112,66 @@ export class RecognitionService {
           id,
           dataUrl,
           video,
+          sessionId: options.sessionId,
+          timestampMs: options.timestampMs,
+          finish: options.finish,
+        }) + "\n",
+      );
+    });
+  }
+
+  #python() {
+    const venv = path.join(
+      this.root,
+      ".venv",
+      process.platform === "win32" ? "Scripts/python.exe" : "bin/python",
+    );
+    return process.env.ASL_SHOP_PYTHON || (existsSync(venv) ? venv : "python3");
+  }
+
+  async demoList() {
+    return this.#replay(["--list"]);
+  }
+
+  async demoClip(index) {
+    if (!Number.isInteger(index) || index < 0 || index > 64) throw new Error("Unknown demo clip.");
+    return this.#replay(["--clip", String(index)]);
+  }
+
+  async #replay(args) {
+    if (this.packaged) throw new Error("Dataset replay runs from the development checkout.");
+    const { stdout } = await execFileAsync(
+      this.#python(),
+      [path.join(this.root, "scripts", "demo_replay.py"), ...args],
+      { env: process.env, maxBuffer: 64 * 1024 * 1024 },
+    );
+    return JSON.parse(stdout);
+  }
+
+  analyzeLandmarks(landmarks, options = {}) {
+    if (!Array.isArray(landmarks) || landmarks.length > 2)
+      return Promise.reject(new Error("Landmark replay accepts one signer with up to two hands."));
+    if (
+      typeof options.sessionId !== "string" ||
+      !options.sessionId.length ||
+      options.sessionId.length > 100 ||
+      !Number.isFinite(options.timestampMs) ||
+      (options.finish !== undefined && typeof options.finish !== "boolean")
+    )
+      return Promise.reject(
+        new Error("Landmark replay requires a session ID and frame timestamp."),
+      );
+    if (!this.#child) this.#start();
+    const id = ++this.#nextId;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.stop(new Error("Hand detection timed out during replay."));
+      }, 60000);
+      this.#pending.set(id, { resolve, reject, timer });
+      this.#child.stdin.write(
+        JSON.stringify({
+          id,
+          landmarks,
           sessionId: options.sessionId,
           timestampMs: options.timestampMs,
           finish: options.finish,

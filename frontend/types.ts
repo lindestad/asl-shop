@@ -43,6 +43,18 @@ export type Recognition = {
   };
 };
 
+export type ReplayHand = { hand: "Right" | "Left"; points: [number, number][] };
+export type ReplayFrame = { t: number; hands: ReplayHand[] };
+export type DemoClipInfo = {
+  index: number;
+  name: string;
+  signer: string;
+  frames: number;
+  durationMs: number;
+  text: string;
+};
+export type DemoClip = DemoClipInfo & { frames: ReplayFrame[] };
+
 export type SourceImage = { name: string; dataUrl: string };
 
 export interface DesktopBridge {
@@ -52,6 +64,12 @@ export interface DesktopBridge {
     dataUrl: string,
     options: { sessionId: string; timestampMs: number; finish?: boolean },
   ) => Promise<Recognition>;
+  recognizeLandmarks: (
+    landmarks: ReplayHand[],
+    options: { sessionId: string; timestampMs: number; finish?: boolean },
+  ) => Promise<Recognition>;
+  demoList: () => Promise<DemoClipInfo[]>;
+  demoClip: (index: number) => Promise<DemoClip>;
 }
 
 declare global {

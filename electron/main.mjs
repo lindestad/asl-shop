@@ -67,6 +67,11 @@ handle("images:open", async () => {
 });
 handle("recognition:analyze", (dataUrl) => recognition.analyze(dataUrl));
 handle("recognition:frame", (dataUrl, options) => recognition.analyze(dataUrl, true, options));
+handle("recognition:landmarks", (landmarks, options) =>
+  recognition.analyzeLandmarks(landmarks, options),
+);
+handle("demo:list", () => recognition.demoList());
+handle("demo:clip", (index) => recognition.demoClip(index));
 
 async function createWindow() {
   window = new BrowserWindow({

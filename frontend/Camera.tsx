@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Camera, CameraOff, LoaderCircle } from "lucide-react";
+import { Camera, CameraOff, Clapperboard, LoaderCircle } from "lucide-react";
 import { FingerspellingSummary, LandmarkOverlay, RecognitionSummary } from "./components";
 import Scratchpad from "./Scratchpad";
-import type { Recognition } from "./types";
+import type { DemoClipInfo, Recognition } from "./types";
 
 export default function CameraView() {
   const video = useRef<HTMLVideoElement>(null);
@@ -10,12 +10,52 @@ export default function CameraView() {
   const session = useRef(0);
   const textSession = useRef(crypto.randomUUID());
   const finishRequested = useRef(false);
+  const replayingRef = useRef(false);
   const [running, setRunning] = useState(false);
   const [starting, setStarting] = useState(false);
   const [result, setResult] = useState<Recognition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
   const [fps, setFps] = useState(0);
+  const [demoClips, setDemoClips] = useState<DemoClipInfo[]>([]);
+  const [demoIndex, setDemoIndex] = useState(0);
+  const [replaying, setReplaying] = useState(false);
+
+  useEffect(() => {
+    if (!window.desktop) return;
+    window.desktop
+      .demoList()
+      .then(setDemoClips)
+      .catch(() => setDemoClips([]));
+  }, []);
+
+  async function playClip() {
+    const desktop = window.desktop;
+    if (!desktop) return;
+    try {
+      const clip = await desktop.demoClip(demoIndex);
+      newText();
+      const sessionId = textSession.current;
+      replayingRef.current = true;
+      setReplaying(true);
+      setError(null);
+      for (let i = 0; i < clip.frames.length && replayingRef.current; i++) {
+        const frame = clip.frames[i];
+        const recognition = await desktop.recognizeLandmarks(frame.hands, {
+          sessionId,
+          timestampMs: frame.t,
+          finish: i === clip.frames.length - 1,
+        });
+        if (sessionId === textSession.current) setResult(recognition);
+        if (i + 1 < clip.frames.length) await new Promise((tick) => setTimeout(tick, 33));
+      }
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      replayingRef.current = false;
+      setReplaying(false);
+    }
+  }
 
   function newText() {
     textSession.current = crypto.randomUUID();
@@ -32,6 +72,8 @@ export default function CameraView() {
     setStarting(false);
     setResult(null);
     setFps(0);
+    replayingRef.current = false;
+    setReplaying(false);
   }
 
   useEffect(() => {
@@ -165,13 +207,22 @@ export default function CameraView() {
                 className="camera-video"
                 aria-label="Live camera feed"
               />
-              {running && <LandmarkOverlay result={result} mirrored />}
+              {(running || replaying) && (
+                <LandmarkOverlay result={result} mirrored={running && !replaying} />
+              )}
             </div>
-            {!running && (
+            {!running && !replaying && (
               <div className="empty-state">
                 <CameraOff size={34} strokeWidth={1.4} />
                 <strong>The camera is off</strong>
                 <span>Start the camera to see your signs here.</span>
+              </div>
+            )}
+            {replaying && (
+              <div className="empty-state">
+                <Clapperboard size={34} strokeWidth={1.4} />
+                <strong>Replaying a dataset clip</strong>
+                <span>Landmark frames drive the same live pipeline, no camera involved.</span>
               </div>
             )}
           </div>
@@ -234,6 +285,38 @@ export default function CameraView() {
           )}
         </aside>
       </div>
+      {window.desktop && demoClips.length > 0 && (
+        <section className="replay-card" aria-label="Dataset replay">
+          <div className="replay-copy">
+            <span className="eyebrow">DATASET REPLAY</span>
+            <p>
+              No camera? Replay landmark frames from dataset clips through the same live and
+              final-text pipeline.
+            </p>
+          </div>
+          <select
+            aria-label="Replay clip"
+            value={demoIndex}
+            disabled={replaying}
+            onChange={(event) => setDemoIndex(Number(event.target.value))}
+          >
+            {demoClips.map((clip, position) => (
+              <option key={clip.index} value={position}>
+                clip {position + 1} · {(clip.durationMs / 1000).toFixed(1)} s · {clip.text}
+              </option>
+            ))}
+          </select>
+          <button
+            className="primary-button"
+            type="button"
+            disabled={replaying}
+            onClick={() => void playClip()}
+          >
+            {replaying ? <LoaderCircle className="spin" size={17} /> : <Clapperboard size={17} />}
+            {replaying ? "Replaying…" : "Play clip"}
+          </button>
+        </section>
+      )}
       <Scratchpad result={result} />
     </div>
   );

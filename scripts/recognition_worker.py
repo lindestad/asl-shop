@@ -114,14 +114,47 @@ def analyze(data_url, video=False, session_id=None, timestamp_ms=None, finish=Fa
     }
 
 
+DEMO_CANVAS = 1000.0
+
+
+def analyze_landmarks(hands, session_id=None, timestamp_ms=None, finish=False):
+    """Demo replay path: landmark frames produced by scripts/demo_replay.py feed the
+    runtime directly, skipping image decode and MediaPipe; identical downstream pipeline."""
+    from types import SimpleNamespace
+
+    prepared = [
+        {"hand": hand["hand"], "score": 1.0,
+         "landmarks": [SimpleNamespace(x=float(p[0]), y=float(p[1]), z=0.0) for p in hand["points"]]}
+        for hand in hands
+    ]
+    outputs = neural.analyze(prepared, DEMO_CANVAS, DEMO_CANVAS, video=True, session_id=session_id,
+                             timestamp_ms=timestamp_ms, finish=finish)
+    return {
+        "width": DEMO_CANVAS,
+        "height": DEMO_CANVAS,
+        "classifierAvailable": outputs["handshapeAvailable"],
+        **outputs,
+        "hands": [
+            {"hand": hand["hand"], "score": hand["score"], "features": [],
+             "landmarks": [{"x": p.x, "y": p.y, "z": p.z} for p in hand["landmarks"]]}
+            for hand in prepared
+        ],
+    }
+
+
 def main():
     for line in sys.stdin:
         request = {}
         try:
             request = json.loads(line)
-            response = {"id": request["id"], "result": analyze(
-                request["dataUrl"], request.get("video", False), request.get("sessionId"),
-                request.get("timestampMs"), request.get("finish", False))}
+            if request.get("landmarks") is not None:
+                response = {"id": request["id"], "result": analyze_landmarks(
+                    request["landmarks"], request.get("sessionId"),
+                    request.get("timestampMs"), request.get("finish", False))}
+            else:
+                response = {"id": request["id"], "result": analyze(
+                    request["dataUrl"], request.get("video", False), request.get("sessionId"),
+                    request.get("timestampMs"), request.get("finish", False))}
         except Exception as error:
             response = {"id": request.get("id"), "error": str(error)}
         print(json.dumps(response, allow_nan=False), flush=True)
