@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Camera, CameraOff, LoaderCircle } from "lucide-react";
 import { FingerspellingSummary, LandmarkOverlay, RecognitionSummary } from "./components";
+import Scratchpad from "./Scratchpad";
 import type { Recognition } from "./types";
 
 export default function CameraView() {
@@ -42,7 +43,7 @@ export default function CameraView() {
 
   async function start() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      setError("Kamera er ikke tilgjengelig i dette miljøet.");
+      setError("The camera is not available in this environment.");
       return;
     }
     const current = ++session.current;
@@ -71,10 +72,10 @@ export default function CameraView() {
       const name = (reason as DOMException).name;
       setError(
         name === "NotAllowedError"
-          ? "Kameratilgang ble avslått. Gi appen tilgang i systeminnstillingene og prøv igjen."
+          ? "Camera access was denied. Allow access in your system settings and try again."
           : name === "NotFoundError"
-            ? "Fant ikke noe kamera. Koble til et kamera og prøv igjen."
-            : `Kunne ikke starte kameraet: ${(reason as Error).message}`,
+            ? "No camera found. Connect a camera and try again."
+            : `Could not start the camera: ${(reason as Error).message}`,
       );
     } finally {
       if (current === session.current) setStarting(false);
@@ -146,36 +147,37 @@ export default function CameraView() {
     <div className="view">
       <div className="view-heading">
         <div>
-          <span className="eyebrow">SANNTID</span>
-          <h1>Live kamera</h1>
-          <p>Vis et tegn foran kameraet for å analysere hånden fortløpende.</p>
+          <h1>Live camera</h1>
+          <p>Show a sign to the camera and your hand is analyzed continuously.</p>
         </div>
         <span className={`status-pill ${running ? "live" : ""}`}>
-          {running ? "Kamera på" : "Kamera av"}
+          {running ? "Camera on" : "Camera off"}
         </span>
       </div>
       <div className="content-grid">
-        <section className="preview-card" aria-label="Kamerabilde">
-          <div className="preview-stage camera-stage" style={{ aspectRatio }}>
-            <video
-              ref={video}
-              muted
-              playsInline
-              className="camera-video"
-              aria-label="Live kamerabilde"
-            />
-            {running && <LandmarkOverlay result={result} mirrored />}
+        <section className="preview-card" aria-label="Camera feed">
+          <div className="camera-stage">
+            <div className="camera-frame" style={{ "--ratio": aspectRatio } as CSSProperties}>
+              <video
+                ref={video}
+                muted
+                playsInline
+                className="camera-video"
+                aria-label="Live camera feed"
+              />
+              {running && <LandmarkOverlay result={result} mirrored />}
+            </div>
             {!running && (
               <div className="empty-state">
                 <CameraOff size={34} strokeWidth={1.4} />
-                <strong>Kameraet er av</strong>
-                <span>Start kameraet for å se tegn her.</span>
+                <strong>The camera is off</strong>
+                <span>Start the camera to see your signs here.</span>
               </div>
             )}
           </div>
           <div className="preview-footer">
             <span>
-              {running ? "Håndanalyse kjører lokalt" : "Ingen video tas opp eller lagres"}
+              {running ? "Hand analysis runs locally" : "No video is recorded or stored"}
               {running && window.desktop && (
                 <>
                   {" "}
@@ -196,7 +198,7 @@ export default function CameraView() {
               ) : (
                 <Camera size={17} />
               )}
-              {starting ? "Starter…" : running ? "Stopp kamera" : "Start kamera"}
+              {starting ? "Starting…" : running ? "Stop camera" : "Start camera"}
             </button>
           </div>
         </section>
@@ -221,10 +223,10 @@ export default function CameraView() {
             </div>
           )}
           <div className="hint-card">
-            <strong>For best resultat</strong>
-            <p>Vis hele hånden i bildet. Bruk jevnt lys og en rolig bakgrunn.</p>
+            <strong>For best results</strong>
+            <p>Keep your whole hand in view. Use even lighting and a plain background.</p>
           </div>
-          {!window.desktop && <p className="note">Start Electron-appen for lokal gjenkjenning.</p>}
+          {!window.desktop && <p className="note">Start the Electron app for local recognition.</p>}
           {error && (
             <p className="error" role="alert">
               {error}
@@ -232,6 +234,7 @@ export default function CameraView() {
           )}
         </aside>
       </div>
+      <Scratchpad result={result} />
     </div>
   );
 }

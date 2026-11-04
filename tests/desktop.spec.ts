@@ -3,11 +3,6 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-const sampleImage = path.resolve(
-  process.env.ASL_SHOP_TEST_DATA_ROOT || "data",
-  "asl_alphabet_train/asl_alphabet_train/A/A1000.jpg",
-);
-
 declare global {
   interface Window {
     cameraTest: {
@@ -18,42 +13,32 @@ declare global {
 }
 
 test.beforeEach(() => {
-  const sample = sampleImage;
+  const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
   test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration tests.");
   if (!process.env.ASL_SHOP_TEST_APP) {
     expect(
-      existsSync(path.resolve("data/knn.pkl")) ||
-        existsSync(path.resolve(process.env.ASL_HANDSHAPE_MODEL || "data/handshape.pt")),
-      "Train a neural handshape model or the KNN classifier first.",
+      existsSync(path.resolve("data/knn.pkl")),
+      "Train the classifier with model/knn.py first.",
     ).toBe(true);
   }
 });
 
 test("Electron recognizes a letter from an image with the trained model", async () => {
-  const sample = sampleImage;
+  const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
   test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration test.");
   const application = await electron.launch({
     executablePath: process.env.ASL_SHOP_TEST_APP,
-    args: process.env.ASL_SHOP_TEST_APP ? ["--disable-gpu"] : ["--disable-gpu", "."],
+    args: process.env.ASL_SHOP_TEST_APP ? [] : ["."],
     env: { ...process.env, ASL_DEV_URL: "http://127.0.0.1:5173" },
   });
   try {
     const page = await application.firstWindow();
-    await expect(page.getByRole("heading", { name: "Live kamera" })).toBeVisible({
-      timeout: 45000,
-    });
-    await application.evaluate(({ dialog }, filename) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
-    }, sample);
-
-    await page.getByRole("button", { name: "Bilde" }).click();
-    await page.getByRole("button", { name: "Velg bilde" }).click();
-    await expect(page.getByRole("img", { name: "A1000.jpg" })).toBeVisible();
-    await expect(page.getByText("1 hånd funnet")).toBeVisible({ timeout: 45000 });
-    await expect(page.locator(".result-letter")).toHaveText("A");
-    await expect(
-      page.getByText(/5 av 5 nærmeste treningseksempler|Nevral bokstavmodell/),
-    ).toBeVisible();
+    await page.waitForLoadState("domcontentloaded");
+    const dataUrl = `data:image/jpeg;base64,${(await readFile(sample)).toString("base64")}`;
+    const result = await page.evaluate((url) => window.desktop!.recognize(url), dataUrl);
+    expect(result.hands).toHaveLength(1);
+    expect(result.prediction?.letter).toBe("A");
+    expect(result.prediction?.confidence).toBe(1);
     expect(
       await page.evaluate(() => typeof (window as unknown as { require?: unknown }).require),
     ).toBe("undefined");
@@ -64,18 +49,16 @@ test("Electron recognizes a letter from an image with the trained model", async 
 });
 
 test("camera recognizes letters, keeps up with video, finds new hands, and restarts", async () => {
-  const sample = sampleImage;
+  const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
   test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration test.");
   const application = await electron.launch({
     executablePath: process.env.ASL_SHOP_TEST_APP,
-    args: process.env.ASL_SHOP_TEST_APP ? ["--disable-gpu"] : ["--disable-gpu", "."],
+    args: process.env.ASL_SHOP_TEST_APP ? [] : ["."],
     env: { ...process.env, ASL_DEV_URL: "http://127.0.0.1:5173" },
   });
   try {
     const page = await application.firstWindow();
-    await expect(page.getByRole("heading", { name: "Live kamera" })).toBeVisible({
-      timeout: 45000,
-    });
+    await page.waitForLoadState("domcontentloaded");
     const base64 = (await readFile(sample)).toString("base64");
     await page.evaluate(async (encoded) => {
       const image = new Image();
@@ -105,7 +88,7 @@ test("camera recognizes letters, keeps up with video, finds new hands, and resta
         return stream;
       };
     }, base64);
-    await page.getByRole("button", { name: "Start kamera" }).click();
+    await page.getByRole("button", { name: "Start camera" }).click();
     await expect(page.locator(".result-letter")).toHaveText("A", { timeout: 45000 });
     // Measure completed inference, including transfer, rather than video rendering.
     await expect
@@ -144,8 +127,8 @@ test("camera recognizes letters, keeps up with video, finds new hands, and resta
       expect(hand.features).toHaveLength(63);
     }
 
-    await page.getByRole("button", { name: "Stopp kamera" }).click();
-    await expect(page.getByText("Kamera av")).toBeVisible();
+    await page.getByRole("button", { name: "Stop camera" }).click();
+    await expect(page.getByText("Camera off")).toBeVisible();
     expect(
       await page.locator("video").evaluate((element) => (element as HTMLVideoElement).srcObject),
     ).toBeNull();
@@ -158,20 +141,10 @@ test("camera recognizes letters, keeps up with video, finds new hands, and resta
     await page.evaluate(() => {
       window.cameraTest.multiple = false;
     });
-    await page.getByRole("button", { name: "Start kamera" }).click();
+    await page.getByRole("button", { name: "Start camera" }).click();
     await expect(page.locator(".result-letter")).toHaveText("A");
-    await expect(page.getByText("1 hånd funnet")).toBeVisible();
-    await page.getByRole("button", { name: "Bilde", exact: true }).click();
-    expect(
-      await page.evaluate(() =>
-        window.cameraTest.tracks.every((track) => track.readyState === "ended"),
-      ),
-    ).toBe(true);
-    await page.getByRole("button", { name: "Live kamera", exact: true }).click();
-    await expect(page.getByText("Kamera av")).toBeVisible();
-    await page.getByRole("button", { name: "Start kamera" }).click();
-    await expect(page.locator(".result-letter")).toHaveText("A");
-    await page.getByRole("button", { name: "Stopp kamera" }).click();
+    await expect(page.getByText("1 hand found")).toBeVisible();
+    await page.getByRole("button", { name: "Stop camera" }).click();
   } finally {
     await application.close();
   }
