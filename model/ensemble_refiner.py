@@ -37,6 +37,7 @@ class EnsembleRefiner:
         self.directory = model_directory or os.environ.get("ASL_ENSEMBLE_MODEL_DIR")
         self.enabled = bool(self.directory)
         self.models = None
+        self.dtype = None
         self.max_chars = None
         self.device = None
         self.error = None
@@ -67,11 +68,20 @@ class EnsembleRefiner:
         labels = payloads[0]["labels"]
         if any(payload["labels"] != labels for payload in payloads):
             raise ValueError("Ensemble members must share the same label vocabulary.")
+        dtypes = {payload.get("dtype") for payload in payloads}
+        if dtypes - {None, "fp32", "bf16"}:
+            raise ValueError("Unsupported checkpoint precisions: "
+                             f"{sorted(str(d) for d in dtypes)} (fp16 members decode to NaN).")
+        if len(dtypes) > 1:
+            raise ValueError("Ensemble members must share the same precision.")
+        self.dtype = torch.bfloat16 if "bf16" in dtypes else None
         self.max_chars = payloads[0].get("max_decode", 48)
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.models = []
         for payload in payloads:
             model = Recognizer(**payload["architecture"]).to(self.device)
+            if self.dtype is not None:
+                model = model.to(self.dtype)
             model.load_state_dict(payload["state_dict"], strict=True)
             self.models.append(model.eval())
 
@@ -90,7 +100,8 @@ class EnsembleRefiner:
             if self.models is None:
                 self._load()
             pose, segments, positions = timeline_tokens(values)
-            pose = torch.from_numpy(pose).unsqueeze(0).to(self.device)
+            pose = torch.from_numpy(pose).unsqueeze(0).to(
+                self.device, dtype=self.dtype or torch.float32)
             segments = torch.from_numpy(segments).unsqueeze(0).to(self.device)
             positions = torch.from_numpy(positions).unsqueeze(0).to(self.device)
             with torch.inference_mode():
