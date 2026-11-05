@@ -42,11 +42,12 @@ En Electron-app for gjenkjenning av ASL-bokstaver fra live kamera eller ett bild
 Appen har to visninger: **Live kamera** og **Bilde**. Bilder og kamerarammer analyseres
 lokalt av en Python-prosess med MediaPipe Hand Landmarker.
 
-**Bokstavmodell:** En KNN-modell trenes på landemerker fra ASL Alphabet-datasettet.
-Den bruker de samme 63 normaliserte håndkoordinatene som kamera- og bildeanalysen.
-Den lokale modellen lagres som `data/knn.pkl` og inkluderes ved pakking. Visningen
-oppgir hvor mange av de fem nærmeste treningseksemplene som støtter bokstaven;
-det er ikke en kalibrert sannsynlighet. Ved færre enn tre stemmer vises ingen bokstav.
+**Bokstavmodeller:** En nedtrekksmeny i kameravisningen velger mellom en KNN- og en
+CNN-modell, begge trent på landemerker fra ASL Alphabet-datasettet. De bruker de samme
+63 normaliserte håndkoordinatene som kamera- og bildeanalysen. Modellene ligger i
+`model/trained_models/` og inkluderes ved pakking. KNN-modellen bruker k=1 og viser
+nærmeste treningseksempel; CNN-modellen viser softmax-sannsynligheten, som ikke er
+kalibrert. Ved under 60 % vises ingen bokstav.
 J og Z er bevegelsestegn i ASL, så en modell som bare ser ett bilde om gangen kan
 ikke gjenkjenne hele bevegelsen.
 
@@ -105,8 +106,8 @@ som treningen og måler ikke generalisering til nye personer, bakgrunner og lysf
 Begge skriptene har `--input` og `--output` for andre lokale filbaner. Standardbanene
 er relative til repo-roten, uavhengig av terminalens arbeidsmappe.
 
-Etter trening trengs bare `data/hand_landmarker.task` og `data/knn.pkl` for å kjøre
-appen. Uten bokstavmodellen vises håndlandemerker, men ingen bokstav. Pakkede apper
+For å kjøre appen trengs `data/hand_landmarker.task` og modellene i
+`model/trained_models/`. CNN-modellen krever også PyTorch. Uten bokstavmodellen vises håndlandemerker, men ingen bokstav. Pakkede apper
 inkluderer modellene og krever verken treningsdatasettet eller en Python-installasjon.
 Last bare pickle-modeller som du selv har trent eller stoler på.
 

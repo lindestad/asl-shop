@@ -1,3 +1,5 @@
+export type ModelId = "neural" | "knn" | "cnn";
+
 export type Point = { x: number; y: number; z: number };
 
 export type Hand = {
@@ -11,8 +13,9 @@ export type Recognition = {
   hands: Hand[];
   width: number;
   height: number;
+  model: ModelId;
   classifierAvailable: boolean;
-  prediction: { letter: string; confidence: number; method?: "knn" | "neural" } | null;
+  prediction: { letter: string; confidence: number; method?: ModelId } | null;
   handshapeAvailable?: boolean;
   handshapeError?: string | null;
   fingerspelling?: {
@@ -61,17 +64,18 @@ export type DemoClip = Omit<DemoClipInfo, "video"> & {
 
 export type SourceImage = { name: string; dataUrl: string };
 
+export type FrameOptions = {
+  sessionId: string;
+  timestampMs: number;
+  finish?: boolean;
+  model?: ModelId;
+};
+
 export interface DesktopBridge {
   openImage: () => Promise<SourceImage | null>;
-  recognize: (dataUrl: string) => Promise<Recognition>;
-  recognizeFrame: (
-    dataUrl: string,
-    options: { sessionId: string; timestampMs: number; finish?: boolean },
-  ) => Promise<Recognition>;
-  recognizeLandmarks: (
-    landmarks: ReplayHand[],
-    options: { sessionId: string; timestampMs: number; finish?: boolean },
-  ) => Promise<Recognition>;
+  recognize: (dataUrl: string, model?: ModelId) => Promise<Recognition>;
+  recognizeFrame: (dataUrl: string, options: FrameOptions) => Promise<Recognition>;
+  recognizeLandmarks: (landmarks: ReplayHand[], options: FrameOptions) => Promise<Recognition>;
   demoList: () => Promise<DemoClipInfo[]>;
   demoClip: (index: number) => Promise<DemoClip>;
 }

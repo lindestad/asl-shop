@@ -1,4 +1,9 @@
-"""Train the runtime classifier from locally extracted hand landmarks."""
+"""Train the runtime classifier from locally extracted hand landmarks.
+
+Reads a landmarks CSV with a label column followed by 63 coordinates in
+x0,y0,z0,... order. A header row is optional: files from the extraction
+explorations are headerless and assumed to be in that canonical order.
+"""
 
 import argparse
 from pathlib import Path
@@ -16,20 +21,41 @@ FEATURE_COLUMNS = [f"{axis}{i}" for i in range(21) for axis in "xyz"]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, default=ROOT / "data" / "extracted_landmarks.csv")
-    parser.add_argument("--output", type=Path, default=ROOT / "data" / "knn.pkl")
+    parser.add_argument(
+        "--input", type=Path, default=ROOT / "data" / "extracted_landmarks.csv"
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / "model" / "trained_models" / "knn_model.pkl",
+    )
     args = parser.parse_args()
     if not args.input.is_file():
-        parser.error(f"Missing landmarks: {args.input}. Run uv run python load_data.py first.")
+        parser.error(
+            f"Missing landmarks: {args.input}. Run uv run python load_data.py first."
+        )
 
-    df = pd.read_csv(args.input)
+    with args.input.open() as file:
+        has_header = file.readline().lower().startswith("label")
+    # Headerless files skip the column-order guard: there is no header to verify.
+    df = (
+        pd.read_csv(args.input)
+        if has_header
+        else pd.read_csv(args.input, header=None, names=["label", *FEATURE_COLUMNS])
+    )
     if list(df.columns) != ["label", *FEATURE_COLUMNS]:
-        parser.error("Expected a label column followed by 63 coordinates in x0,y0,z0,... order.")
+        parser.error(
+            "Expected a label column followed by 63 coordinates in x0,y0,z0,... order."
+        )
     features = df[FEATURE_COLUMNS].to_numpy(dtype=np.float64)
     if df["label"].isna().any() or not np.isfinite(features).all():
-        parser.error("Labels and coordinates must not contain missing or non-finite values.")
+        parser.error(
+            "Labels and coordinates must not contain missing or non-finite values."
+        )
     if len(df) < 8:
-        parser.error("At least eight landmark rows are required for training and evaluation.")
+        parser.error(
+            "At least eight landmark rows are required for training and evaluation."
+        )
 
     x_train, x_test, y_train, y_test = train_test_split(
         features, df["label"].astype(str), test_size=0.3, random_state=42

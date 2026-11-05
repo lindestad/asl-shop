@@ -6,6 +6,8 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
+const MODELS = ["neural", "knn", "cnn"];
+
 export class RecognitionService {
   #child = null;
   #pending = new Map();
@@ -78,6 +80,8 @@ export class RecognitionService {
   }
 
   analyze(dataUrl, video = false, options = {}) {
+    if (options.model !== undefined && !MODELS.includes(options.model))
+      return Promise.reject(new Error("Unknown recognition model."));
     if (
       typeof dataUrl !== "string" ||
       dataUrl.length > 24 * 1024 * 1024 ||
@@ -112,6 +116,7 @@ export class RecognitionService {
           id,
           dataUrl,
           video,
+          model: options.model,
           sessionId: options.sessionId,
           timestampMs: options.timestampMs,
           finish: options.finish,

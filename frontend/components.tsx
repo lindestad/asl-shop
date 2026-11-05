@@ -47,7 +47,9 @@ export function RecognitionSummary({ result }: { result: Recognition | null }) {
           <p>
             {result.prediction.method === "neural"
               ? `Neural letter model · model score ${Math.round(result.prediction.confidence * 100)} %`
-              : `${Math.round(result.prediction.confidence * 5)} of 5 nearest training examples`}
+              : result.prediction.method === "cnn"
+                ? `${Math.round(result.prediction.confidence * 100)}% confidence`
+                : "Closest match in the training examples"}
           </p>
         </>
       ) : (

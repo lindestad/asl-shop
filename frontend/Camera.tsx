@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Camera, CameraOff, Clapperboard, LoaderCircle } from "lucide-react";
 import { FingerspellingSummary, LandmarkOverlay, RecognitionSummary } from "./components";
 import Scratchpad from "./Scratchpad";
-import type { DemoClip, DemoClipInfo, Recognition } from "./types";
+import type { DemoClip, DemoClipInfo, ModelId, Recognition } from "./types";
 
 export default function CameraView() {
   const video = useRef<HTMLVideoElement>(null);
@@ -11,13 +11,14 @@ export default function CameraView() {
   const textSession = useRef(crypto.randomUUID());
   const finishRequested = useRef(false);
   const replayingRef = useRef(false);
-  const frameBusy = useRef(false);
+  const inFlight = useRef(0);
   const [running, setRunning] = useState(false);
   const [starting, setStarting] = useState(false);
   const [result, setResult] = useState<Recognition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
   const [fps, setFps] = useState(0);
+  const [model, setModel] = useState<ModelId>("neural");
   const [demoClips, setDemoClips] = useState<DemoClipInfo[]>([]);
   const [demoIndex, setDemoIndex] = useState(0);
   const [replaying, setReplaying] = useState(false);
@@ -90,7 +91,7 @@ export default function CameraView() {
       // The clip is over and no further video frames will be scheduled, so the
       // finish flag goes out on one last snapshot of the final frame, after the
       // loop's last in-flight analysis has landed.
-      while (frameBusy.current) await new Promise((tick) => setTimeout(tick, 60));
+      while (inFlight.current > 0) await new Promise((tick) => setTimeout(tick, 60));
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d")!;
       const width = Math.min(640, element.videoWidth);
@@ -102,6 +103,7 @@ export default function CameraView() {
         sessionId: segmentId,
         timestampMs: performance.now(),
         finish: true,
+        model,
       });
       if (segmentId === textSession.current) setResult(recognition);
     } catch (reason) {
@@ -200,13 +202,17 @@ export default function CameraView() {
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d")!;
     let canceled = false;
+    // Keep a second frame queued so the next JPEG is encoded and sent while the
+    // worker is still processing the previous one. With a single frame in
+    // flight, a round trip slightly over one camera frame skips every other frame.
+    const maxInFlight = 2;
     let callback = 0;
     let completedFrames = 0;
     let sampleStarted = 0;
 
     async function analyzeFrame() {
-      if (frameBusy.current || !element.videoWidth) return;
-      frameBusy.current = true;
+      if (inFlight.current >= maxInFlight || !element.videoWidth) return;
+      inFlight.current++;
       try {
         const width = Math.min(640, element.videoWidth);
         canvas.width = width;
@@ -215,7 +221,12 @@ export default function CameraView() {
         const segmentId = textSession.current;
         const recognition = await window.desktop!.recognizeFrame(
           canvas.toDataURL("image/jpeg", 0.85),
-          { sessionId: segmentId, timestampMs: performance.now(), finish: finishRequested.current },
+          {
+            sessionId: segmentId,
+            timestampMs: performance.now(),
+            finish: finishRequested.current,
+            model,
+          },
         );
         if (!canceled && segmentId === textSession.current) {
           setResult(recognition);
@@ -236,7 +247,7 @@ export default function CameraView() {
           element.cancelVideoFrameCallback(callback);
         }
       } finally {
-        frameBusy.current = false;
+        inFlight.current--;
       }
     }
 
@@ -252,7 +263,8 @@ export default function CameraView() {
       canceled = true;
       element.cancelVideoFrameCallback(callback);
     };
-  }, [running]);
+    // Restarting on a model change also discards results still in flight from the old model.
+  }, [running, model]);
 
   return (
     <div className="view">
@@ -288,11 +300,11 @@ export default function CameraView() {
                 <span>Start the camera to see your signs here.</span>
               </div>
             )}
-            {replaying && (
+            {replaying && !running && (
               <div className="empty-state">
                 <Clapperboard size={34} strokeWidth={1.4} />
                 <strong>Replaying a dataset clip</strong>
-                <span>Landmark frames drive the same live pipeline, no camera involved.</span>
+                <span>Reconstructed landmark frames drive the same live pipeline.</span>
               </div>
             )}
           </div>
@@ -306,21 +318,37 @@ export default function CameraView() {
                 </>
               )}
             </span>
-            <button
-              className="primary-button"
-              type="button"
-              disabled={starting}
-              onClick={() => (running ? stop() : void start())}
-            >
-              {starting ? (
-                <LoaderCircle className="spin" size={17} />
-              ) : running ? (
-                <CameraOff size={17} />
-              ) : (
-                <Camera size={17} />
-              )}
-              {starting ? "Starting…" : running ? "Stop camera" : "Start camera"}
-            </button>
+            <div className="preview-controls">
+              <label className="model-select">
+                Model
+                <select
+                  value={model}
+                  onChange={(event) => {
+                    setModel(event.target.value as ModelId);
+                    setResult(null);
+                  }}
+                >
+                  <option value="neural">Neural</option>
+                  <option value="knn">KNN</option>
+                  <option value="cnn">CNN</option>
+                </select>
+              </label>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={starting}
+                onClick={() => (running ? stop() : void start())}
+              >
+                {starting ? (
+                  <LoaderCircle className="spin" size={17} />
+                ) : running ? (
+                  <CameraOff size={17} />
+                ) : (
+                  <Camera size={17} />
+                )}
+                {starting ? "Starting…" : running ? "Stop camera" : "Start camera"}
+              </button>
+            </div>
           </div>
         </section>
         <aside className="result-column">

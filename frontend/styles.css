@@ -261,6 +261,28 @@ h1 {
 .camera-stage .empty-state span {
   color: #9db0b2;
 }
+.preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+.model-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.model-select select {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid #e5e9e9;
+  border-radius: 8px;
+  background: #fff;
+  color: #163c3d;
+  font: inherit;
+  font-weight: 650;
+}
 .preview-footer {
   display: flex;
   align-items: center;

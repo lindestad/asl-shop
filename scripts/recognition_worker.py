@@ -10,11 +10,16 @@ from pathlib import Path
 import pickle
 import sys
 import time
+import warnings
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(ROOT))
-CLASSIFIER_PATH = Path(os.environ.get("ASL_KNN_MODEL", ROOT / "data" / "knn.pkl"))
-classifier = None
+MODEL_DIR = ROOT / "model" / "trained_models"
+DEFAULT_MODEL = "neural"
+classifiers = {}
+
+# The KNN was fitted on a DataFrame, but the worker's features use the same column order.
+warnings.filterwarnings("ignore", message="X does not have valid feature names")
 from model.live_neural import NeuralRuntime
 neural = NeuralRuntime(ROOT)
 
@@ -24,31 +29,81 @@ video_scan_timestamp = -1
 video_capacity = 0
 
 
-def get_classifier():
-    global classifier
-    if classifier is None and CLASSIFIER_PATH.exists():
-        with open(CLASSIFIER_PATH, "rb") as f:
-            classifier = pickle.load(f)
-        if classifier.n_features_in_ != 63:
-            raise ValueError("The ASL classifier uses an incompatible feature format.")
-    return classifier
+def load_knn():
+    with open(MODEL_DIR / "knn_model.pkl", "rb") as f:
+        model = pickle.load(f)
+    if model.n_features_in_ != 63:
+        raise ValueError("The KNN classifier uses an incompatible feature format.")
+    return model.classes_, lambda features: model.predict_proba(features.reshape(1, -1))[0]
 
 
-def predict_letter(hands, model):
-    if not hands or model is None:
+def load_cnn():
+    # Imported here so that torch's slow startup only affects people who pick the CNN.
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+
+    # Must match the CNN in model/cnn-landmarks.py; load_state_dict rejects any drift.
+    class CNN(nn.Module):
+        def __init__(self, num_classes):
+            super().__init__()
+            self.conv1 = nn.Conv1d(3, 32, kernel_size=3, padding=1)
+            self.conv2 = nn.Conv1d(32, 64, kernel_size=3, padding=1)
+            self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
+            self.fc1 = nn.Linear(64 * 5, 512)
+            self.fc2 = nn.Linear(512, num_classes)
+
+        def forward(self, x):
+            x = self.pool(F.relu(self.conv1(x)))
+            x = self.pool(F.relu(self.conv2(x)))
+            x = torch.flatten(x, 1)
+            x = F.relu(self.fc1(x))
+            return self.fc2(x)
+
+    with open(MODEL_DIR / "cnn-landmarks.pkl", "rb") as f:
+        checkpoint = pickle.load(f)
+    classes = checkpoint["classes"]
+    model = CNN(len(classes))
+    model.load_state_dict(checkpoint["state_dict"])
+    model.eval()
+
+    def predict_proba(features):
+        # (63,) -> (1, 3, 21): x/y/z are the channels, as in training.
+        batch = torch.from_numpy(features).float().reshape(1, 21, 3).permute(0, 2, 1)
+        with torch.no_grad():
+            return torch.softmax(model(batch), dim=1)[0].numpy()
+
+    return classes, predict_proba
+
+
+LOADERS = {"knn": load_knn, "cnn": load_cnn}
+
+
+def get_classifier(name=DEFAULT_MODEL):
+    if name not in LOADERS:
+        raise ValueError(f"Unknown model: {name}")
+    if name not in classifiers:
+        try:
+            classifiers[name] = LOADERS[name]()
+        except (FileNotFoundError, ImportError) as error:
+            # Hand tracking still works, and the other model can still be selected.
+            print(f"Could not load the {name} model: {error}", file=sys.stderr, flush=True)
+            return None
+    return classifiers[name]
+
+
+def predict_letter(hands, classifier, name):
+    if not hands or classifier is None:
         return None
     import numpy as np
 
+    classes, predict_proba = classifier
     hand = max(hands, key=lambda item: item["score"])
-    probabilities = model.predict_proba(hand["features"].reshape(1, -1))[0]
+    probabilities = predict_proba(hand["features"])
     winner = int(np.argmax(probabilities))
-    # Require a clear majority of neighbours (3 of 5 with the default k).
     if probabilities[winner] < 0.6:
         return None
-    letter = str(model.classes_[winner])
-    if letter in {"J", "Z", "nothing", "del", "space"}:
-        return None
-    return {"letter": letter, "confidence": float(probabilities[winner]), "method": "knn"}
+    return {"letter": str(classes[winner]), "confidence": float(probabilities[winner]), "method": name}
 
 
 def track(frame):
@@ -76,7 +131,8 @@ def track(frame):
     return extractHands(frame, video_detector, video_timestamp)
 
 
-def analyze(data_url, video=False, session_id=None, timestamp_ms=None, finish=False):
+def analyze(data_url, video=False, session_id=None, timestamp_ms=None, finish=False,
+            model_name=DEFAULT_MODEL):
     import cv2
     import numpy as np
     from handTracker.hand_features import detector, extractHands
@@ -96,14 +152,20 @@ def analyze(data_url, video=False, session_id=None, timestamp_ms=None, finish=Fa
         hands = extractHands(frame, detector)
     outputs = neural.analyze(hands, width, height, video=video, session_id=session_id,
                              timestamp_ms=timestamp_ms, finish=finish)
-    model = None
-    if not outputs["handshapeAvailable"]:
-        model = get_classifier()
-        outputs["prediction"] = predict_letter(hands, model)
+    # The picker owns the static letter head; the sequence model always runs.
+    # "neural" falls back to the KNN when the handshape checkpoint is missing.
+    classifier = None
+    model_used = "neural"
+    if model_name != "neural" or not outputs["handshapeAvailable"]:
+        requested = model_name if model_name in LOADERS else "knn"
+        classifier = get_classifier(requested)
+        outputs["prediction"] = predict_letter(hands, classifier, requested) if classifier else None
+        model_used = requested if classifier else model_name
     return {
         "width": width,
         "height": height,
-        "classifierAvailable": model is not None or outputs["handshapeAvailable"],
+        "model": model_used,
+        "classifierAvailable": outputs["handshapeAvailable"] or classifier is not None,
         **outputs,
         "hands": [
             {"hand": hand["hand"], "score": float(hand["score"]),
@@ -132,6 +194,7 @@ def analyze_landmarks(hands, session_id=None, timestamp_ms=None, finish=False):
     return {
         "width": DEMO_CANVAS,
         "height": DEMO_CANVAS,
+        "model": "neural",
         "classifierAvailable": outputs["handshapeAvailable"],
         **outputs,
         "hands": [
@@ -154,7 +217,8 @@ def main():
             else:
                 response = {"id": request["id"], "result": analyze(
                     request["dataUrl"], request.get("video", False), request.get("sessionId"),
-                    request.get("timestampMs"), request.get("finish", False))}
+                    request.get("timestampMs"), request.get("finish", False),
+                    request.get("model") or DEFAULT_MODEL)}
         except Exception as error:
             response = {"id": request.get("id"), "error": str(error)}
         print(json.dumps(response, allow_nan=False), flush=True)
