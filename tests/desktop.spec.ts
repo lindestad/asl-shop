@@ -38,7 +38,9 @@ test("Electron recognizes a letter from an image with the trained model", async 
     const result = await page.evaluate((url) => window.desktop!.recognize(url), dataUrl);
     expect(result.hands).toHaveLength(1);
     expect(result.prediction?.letter).toBe("A");
-    expect(result.prediction?.confidence).toBe(1);
+    // The neural handshape model reports a softmax (≈0.97 here); the KNN
+    // fallback it replaces voted unanimously, so this was once an exact 1.
+    expect(result.prediction?.confidence).toBeGreaterThan(0.9);
     expect(
       await page.evaluate(() => typeof (window as unknown as { require?: unknown }).require),
     ).toBe("undefined");
