@@ -179,11 +179,16 @@ test("demo replay runs dataset footage through the live path", async () => {
     await expect(card.getByRole("option", { name: /footage/ }).first()).toBeAttached();
     await card.getByRole("button", { name: "Play clip" }).click();
     await expect(card.getByRole("button", { name: "Replaying…" })).toBeVisible();
+    // Dataset footage is third-person: it plays unmirrored so the landmarks
+    // detected from its pixels land on the hands the viewer sees.
+    await expect(page.locator("video.camera-video")).not.toHaveClass(/mirrored/);
     // A tainted canvas or a dead protocol rejects every exported frame, so the
     // replay only re-enables and only finishes when detection really ran.
     await expect(card.getByRole("button", { name: "Play clip" })).toBeEnabled({ timeout: 45000 });
     await expect(page.locator("p.error")).toBeHidden();
     await expect(page.getByText("Sekvensen er ferdig.")).toBeVisible({ timeout: 20000 });
+    // The run ends with the clip instead of leaving "Camera on" over a cleared stage.
+    await expect(page.getByText("Camera off")).toBeVisible();
   } finally {
     await application.close();
   }

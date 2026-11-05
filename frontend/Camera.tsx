@@ -117,6 +117,10 @@ export default function CameraView() {
           element.load();
         }
       }
+      // The clip is off: the run ends with it, so the loop stops analyzing the
+      // now-empty element. The finished word stays in the summary and scratchpad.
+      setRunning(false);
+      setFps(0);
       replayingRef.current = false;
       setReplaying(false);
     }
@@ -286,7 +290,7 @@ export default function CameraView() {
                 muted
                 playsInline
                 crossOrigin="anonymous"
-                className="camera-video"
+                className={`camera-video${running && !replaying ? " mirrored" : ""}`}
                 aria-label="Live camera feed"
               />
               {(running || replaying) && (

@@ -212,6 +212,10 @@ h1 {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+/* Selfie view for the live camera only; replayed footage stays as recorded so the
+   landmarks detected from its pixels line up. */
+.camera-video.mirrored {
   transform: scaleX(-1);
 }
 .landmark-overlay {
