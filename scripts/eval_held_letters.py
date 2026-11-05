@@ -32,7 +32,7 @@ the spans, the report says so in its own fields: human_labels is false and
 numbers_from_suggested_labels is true, and those numbers only show the current model agreeing with
 itself.
 
-    uv run --extra neural python scripts/eval_held_letters.py --session data/sign-sessions/person01-day01
+    uv run python scripts/eval_held_letters.py --session data/sign-sessions/person01-day01
 """
 import argparse
 import base64

@@ -170,8 +170,8 @@ keyed by the renderer's `sessionId`:
 On finish the provisional text passes the same gates, then the final answer can
 be recomputed with full context by a bidirectional model:
 
-- **Ensemble refiner** (`model/ensemble_refiner.py`, used when
-  `ASL_ENSEMBLE_MODEL_DIR` points at the checkpoint directory): four
+- **Ensemble refiner** (`model/ensemble_refiner.py`, enabled by default with
+  the bundled ens4 checkpoints; `ASL_ENSEMBLE_MODEL_DIR` overrides the directory): four
   OpenFS-trained recognizers, beam search over the live 91-value timeline,
   fusion as the weighted mean of per-model frame log-posteriors, MAP decode,
   no language model. Output longer than the duration budget allows is rejected

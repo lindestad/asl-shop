@@ -28,8 +28,10 @@ decode (test CER 1.0). bf16's exponent range avoids this.
 ## Use
 
 ```
-ASL_ENSEMBLE_MODEL_DIR=data/models/ensemble-2026-10-25-bf16 npm run dev
+npm run dev
 ```
+
+The app uses this directory by default. Set `ASL_ENSEMBLE_MODEL_DIR` to override it.
 
 `model/ensemble_refiner.py` loads `dtype: "bf16"` payloads natively and refuses
 fp16 files.

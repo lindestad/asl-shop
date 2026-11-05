@@ -12,9 +12,9 @@ Every draft says out loud that it is the model suggesting its own output back: l
 accuracy number may quote a draft; scripts/eval_held_letters.py can score one for plumbing checks and
 marks those numbers numbers_from_suggested_labels.
 
-    uv run --extra neural python scripts/label_sign_session.py --session data/sign-sessions/person01-day01
+    uv run python scripts/label_sign_session.py --session data/sign-sessions/person01-day01
     $EDITOR data/sign-sessions/person01-day01/annotation.draft.json   # correct what is wrong
-    uv run --extra neural python scripts/label_sign_session.py --session ... --confirm --by person01
+    uv run python scripts/label_sign_session.py --session ... --confirm --by person01
 
 --confirm refuses to promote a draft that does not validate, and writes the confirmed annotation.json
 that scripts/eval_held_letters.py scores with human_labels true.

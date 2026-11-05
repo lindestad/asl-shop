@@ -6,26 +6,66 @@ certifi==2026.7.22
     # via mediapipe
 cffi==2.1.1
     # via sounddevice
+cloudpickle==3.1.2
+    # via joblib
+colorama==0.4.6 ; sys_platform == 'win32'
+    # via tqdm
 contourpy==1.3.2 ; python_full_version < '3.11'
     # via matplotlib
 contourpy==1.3.3 ; python_full_version == '3.11.*'
     # via matplotlib
 contourpy==1.4.0 ; python_full_version >= '3.12'
     # via matplotlib
+cuda-bindings==13.4.4 ; python_full_version < '3.15' and sys_platform == 'linux'
+    # via torch
+cuda-pathfinder==1.8.3 ; python_full_version < '3.11' and sys_platform == 'linux'
+    # via cuda-bindings
+cuda-pathfinder==1.8.5 ; python_full_version >= '3.11' and python_full_version < '3.15' and sys_platform == 'linux'
+    # via cuda-bindings
+cuda-toolkit==13.0.3.0 ; python_full_version < '3.11' and sys_platform == 'linux'
+    # via torch
+cuda-toolkit==13.2.2 ; python_full_version >= '3.11' and sys_platform == 'linux'
+    # via torch
 cycler==0.12.1
     # via matplotlib
+filelock==4.1.0 ; python_full_version < '3.11'
+    # via torch
+filelock==4.2.9 ; python_full_version >= '3.11'
+    # via torch
 flatbuffers==25.12.19
     # via mediapipe
 fonttools==4.65.0
     # via matplotlib
+fsspec==2026.9.0
+    # via torch
+jinja2==3.1.6
+    # via torch
+joblib==1.6.0
+    # via scikit-learn
 kiwisolver==1.5.1
     # via matplotlib
+markupsafe==3.0.4
+    # via jinja2
 matplotlib==3.10.9 ; python_full_version < '3.11'
-    # via mediapipe
+    # via
+    #   asl-shop
+    #   mediapipe
 matplotlib==3.11.2 ; python_full_version >= '3.11'
-    # via mediapipe
+    # via
+    #   asl-shop
+    #   mediapipe
 mediapipe==0.10.35
     # via asl-shop
+mpmath==1.3.0
+    # via sympy
+narwhals==2.27.0 ; python_full_version >= '3.11'
+    # via scikit-learn
+networkx==3.4.2 ; python_full_version < '3.11'
+    # via torch
+networkx==3.6.1 ; python_full_version == '3.11.*'
+    # via torch
+networkx==3.7 ; python_full_version >= '3.12'
+    # via torch
 numpy==2.2.6 ; python_full_version < '3.11'
     # via
     #   asl-shop
@@ -33,7 +73,10 @@ numpy==2.2.6 ; python_full_version < '3.11'
     #   matplotlib
     #   mediapipe
     #   opencv-contrib-python
+    #   opencv-python
     #   pandas
+    #   scikit-learn
+    #   scipy
 numpy==2.4.6 ; python_full_version == '3.11.*'
     # via
     #   asl-shop
@@ -41,7 +84,10 @@ numpy==2.4.6 ; python_full_version == '3.11.*'
     #   matplotlib
     #   mediapipe
     #   opencv-contrib-python
+    #   opencv-python
     #   pandas
+    #   scikit-learn
+    #   scipy
 numpy==2.5.3 ; python_full_version >= '3.12'
     # via
     #   asl-shop
@@ -49,11 +95,88 @@ numpy==2.5.3 ; python_full_version >= '3.12'
     #   matplotlib
     #   mediapipe
     #   opencv-contrib-python
+    #   opencv-python
     #   pandas
+    #   scikit-learn
+    #   scipy
+nvidia-cublas==13.1.1.3 ; python_full_version < '3.11' and sys_platform == 'linux'
+    # via
+    #   cuda-toolkit
+    #   nvidia-cudnn-cu13
+    #   nvidia-cusolver
+nvidia-cublas==13.4.1.3 ; python_full_version >= '3.11' and sys_platform == 'linux'
+    # via
+    #   cuda-toolkit
+    #   nvidia-cudnn-cu13
+    #   nvidia-cusolver
+nvidia-cuda-cccl==13.3.5.0.6 ; python_full_version >= '3.11' and sys_platform == 'linux'
+    # via nvidia-nvshmem-cu13
+nvidia-cuda-cupti==13.0.85 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-cuda-cupti==13.2.86 ; (python_full_version >= '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-cuda-nvrtc==13.0.88 ; python_full_version < '3.11' and sys_platform == 'linux'
+    # via
+    #   cuda-toolkit
+    #   nvidia-cublas
+nvidia-cuda-nvrtc==13.2.86 ; python_full_version >= '3.11' and sys_platform == 'linux'
+    # via
+    #   cuda-toolkit
+    #   nvidia-cublas
+nvidia-cuda-runtime==13.0.96 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-cuda-runtime==13.2.86 ; (python_full_version >= '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-cudnn-cu13==9.24.0.43 ; python_full_version < '3.11' and sys_platform == 'linux'
+    # via torch
+nvidia-cudnn-cu13==9.26.0.51 ; python_full_version >= '3.11' and sys_platform == 'linux'
+    # via torch
+nvidia-cufft==12.0.0.61 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-cufft==12.2.0.57 ; (python_full_version >= '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-cufile==1.15.1.6 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-cufile==1.17.1.22 ; (python_full_version >= '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-curand==10.4.0.35 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-cusolver==12.0.4.66 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-cusolver==12.2.0.11 ; (python_full_version >= '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-cusparse==12.6.3.3 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via
+    #   cuda-toolkit
+    #   nvidia-cusolver
+nvidia-cusparse==12.7.10.12 ; (python_full_version >= '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via
+    #   cuda-toolkit
+    #   nvidia-cusolver
+nvidia-cusparselt-cu13==0.8.1 ; sys_platform == 'linux'
+    # via torch
+nvidia-nccl-cu13==2.30.7 ; sys_platform == 'linux'
+    # via torch
+nvidia-nvjitlink==13.5.37 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via
+    #   cuda-toolkit
+    #   nvidia-cufft
+    #   nvidia-cusolver
+    #   nvidia-cusparse
+nvidia-nvshmem-cu13==3.4.5 ; python_full_version < '3.11' and sys_platform == 'linux'
+    # via torch
+nvidia-nvshmem-cu13==3.7.2 ; python_full_version >= '3.11' and sys_platform == 'linux'
+    # via torch
+nvidia-nvtx==13.0.85 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
+nvidia-nvtx==13.2.86 ; (python_full_version >= '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via cuda-toolkit
 opencv-contrib-python==5.0.0.93
     # via
     #   asl-shop
     #   mediapipe
+opencv-python==5.0.0.93
+    # via asl-shop
 packaging==26.3
     # via matplotlib
 pandas==2.3.3 ; python_full_version < '3.11'
@@ -72,9 +195,39 @@ python-dateutil==2.9.0.post0
     #   pandas
 pytz==2026.3.post1 ; python_full_version < '3.11'
     # via pandas
+pyyaml==6.0.3
+    # via asl-shop
+scikit-learn==1.7.2 ; python_full_version < '3.11'
+    # via asl-shop
+scikit-learn==1.9.1 ; python_full_version >= '3.11'
+    # via asl-shop
+scipy==1.15.3 ; python_full_version < '3.11'
+    # via scikit-learn
+scipy==1.17.1 ; python_full_version == '3.11.*'
+    # via scikit-learn
+scipy==1.18.1 ; python_full_version >= '3.12'
+    # via scikit-learn
+setuptools==84.2.1
+    # via torch
 six==1.17.0
     # via python-dateutil
 sounddevice==0.5.6
     # via mediapipe
+sympy==1.14.0
+    # via torch
+threadpoolctl==3.7.0
+    # via scikit-learn
+torch==2.14.1 ; python_full_version < '3.11'
+    # via asl-shop
+torch==2.15.0 ; python_full_version >= '3.11'
+    # via asl-shop
+tqdm==4.70.1
+    # via asl-shop
+triton==3.8.0 ; python_full_version < '3.11' and sys_platform == 'linux'
+    # via torch
+triton==3.9.0 ; python_full_version >= '3.11' and python_full_version < '3.16' and sys_platform == 'linux'
+    # via torch
+typing-extensions==4.16.0
+    # via torch
 tzdata==2026.4 ; python_full_version < '3.11' or sys_platform == 'emscripten' or sys_platform == 'win32'
     # via pandas

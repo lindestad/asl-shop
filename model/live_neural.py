@@ -19,7 +19,7 @@ class NeuralRuntime:
         self.errors = {}
         self.loaded = False
         self.refiner = OpenFSRefiner()
-        self.ensemble = EnsembleRefiner()
+        self.ensemble = EnsembleRefiner(root=root)
         self.reset()
 
     def load(self):

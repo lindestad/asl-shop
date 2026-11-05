@@ -12,15 +12,15 @@ const trainedModels = ["knn_model.pkl", "cnn-landmarks.pkl"].map((name) =>
 );
 for (const classifier of trainedModels)
   if (!existsSync(classifier)) throw new Error(`Missing trained model: ${classifier}`);
-const neuralModels = ["handshape.pt", "sequence.pt"]
-  .map((name) => path.join(root, "data", name))
-  .filter(existsSync);
+const neuralModels = ["handshape.pt", "sequence.pt"].map((name) => path.join(root, "data", name));
+for (const checkpoint of neuralModels)
+  if (!existsSync(checkpoint)) throw new Error(`Missing neural model: ${checkpoint}`);
+const ensembleDirectory = "data/models/ensemble-2026-10-25-bf16";
 const child = spawn(
   "uv",
   [
     "run",
     "--locked",
-    ...(neuralModels.length ? ["--extra", "neural"] : []),
     "--python",
     "3.12",
     "--with",
@@ -42,7 +42,12 @@ const child = spawn(
     `${model}:data`,
     ...trainedModels.flatMap((filename) => ["--add-data", `${filename}:model/trained_models`]),
     ...neuralModels.flatMap((filename) => ["--add-data", `${filename}:data`]),
-    ...(neuralModels.length ? ["--collect-all", "torch", "--hidden-import", "model.neural"] : []),
+    "--add-data",
+    `${path.join(root, ensembleDirectory)}:${ensembleDirectory}`,
+    "--collect-all",
+    "torch",
+    "--hidden-import",
+    "model.neural",
     "--collect-all",
     "mediapipe",
     "--hidden-import",

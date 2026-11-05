@@ -17,9 +17,9 @@ class WindowsSetupTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
-    def test_default_setup_does_not_download_openfs_or_install_torch(self):
+    def test_default_setup_installs_neural_without_downloading_openfs(self):
         plan = self.plan()
-        self.assertFalse(plan["neural"])
+        self.assertTrue(plan["neural"])
         self.assertFalse(plan["openfs"])
         self.assertFalse(plan["extract"])
         self.assertNotIn("neural", plan["pythonSync"])
@@ -29,7 +29,7 @@ class WindowsSetupTests(unittest.TestCase):
         plan = self.plan("-Neural")
         self.assertTrue(plan["neural"])
         self.assertFalse(plan["openfs"])
-        self.assertEqual(plan["pythonSync"][-2:], ["--extra", "neural"])
+        self.assertNotIn("--extra", plan["pythonSync"])
 
     def test_extraction_preserves_custom_path_with_spaces_and_implies_neural(self):
         destination = ROOT / "data" / "external" / "data with spaces"

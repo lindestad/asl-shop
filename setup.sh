@@ -4,20 +4,19 @@ set -euo pipefail
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$repo_dir"
 
-neural_setup=0
 download_openfs=0
 extract_openfs=0
 openfs_dir="$repo_dir/data/external/openfs"
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --neural) neural_setup=1; shift ;;
-        --openfs) neural_setup=1; download_openfs=1; shift ;;
-        --extract-openfs) neural_setup=1; download_openfs=1; extract_openfs=1; shift ;;
+        --neural) shift ;; # Compatibility with older setup commands.
+        --openfs) download_openfs=1; shift ;;
+        --extract-openfs) download_openfs=1; extract_openfs=1; shift ;;
         --openfs-dir)
             [[ $# -ge 2 ]] || { echo "--openfs-dir requires a path" >&2; exit 1; }
             openfs_dir="$2"; shift 2 ;;
         --help)
-            echo "Usage: ./setup.sh [--neural] [--openfs] [--extract-openfs] [--openfs-dir PATH]"
+            echo "Usage: ./setup.sh [--openfs] [--extract-openfs] [--openfs-dir PATH]"
             echo "OpenFS is an optional large download; existing ZIPs are reused and downloads resume."
             exit 0 ;;
         *) echo "Unknown setup option: $1" >&2; exit 1 ;;
@@ -54,9 +53,7 @@ uv_dir="$(dirname -- "$uv_bin")"
 export PATH="$uv_dir:$PATH"
 
 echo "Setting up Python 3.12 and project dependencies..."
-python_extras=()
-if [[ "$neural_setup" -eq 1 ]]; then python_extras=(--extra neural); fi
-"$uv_bin" sync --locked --python 3.12 "${python_extras[@]}"
+"$uv_bin" sync --locked --python 3.12
 
 has_node() {
     command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 &&
