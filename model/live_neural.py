@@ -154,7 +154,14 @@ class NeuralRuntime:
                     or (self.timestamps and timestamp_ms - self.timestamps[0] >= 30000)):
                 self.limit_reached = True
             if not self.finished and not self.limit_reached and self.timestamps and timestamp_ms - self.timestamps[-1] > 1000:
-                self.reset(session_id)
+                # The hand left the frame. A pending segment that actually spelled
+                # something finishes (with ensemble correction); an idle flash or a
+                # static hold still discards, so ghost segments never reach the panel.
+                count, duration, movement, _ = self.spelling_context()
+                if count >= 6 and duration >= 500 and movement:
+                    self.finish_text()
+                else:
+                    self.reset(session_id)
             if self.finished:
                 sequence.update(text=self.text, status="finished", provisional=False, frames=len(self.frames), modelFrames=len(self.model_frames))
             elif self.limit_reached or len(self.frames) >= 900 or (self.timestamps and timestamp_ms - self.timestamps[0] >= 30000):

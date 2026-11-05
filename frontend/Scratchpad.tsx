@@ -20,6 +20,22 @@ export default function Scratchpad({ result }: { result: Recognition | null }) {
     since: 0,
     done: false,
   });
+  const lastStatus = useRef<string | null>(null);
+
+  const fingerspelling = result?.fingerspelling;
+  // The in-progress word rides along as a tail; when the segment finishes, the
+  // ensemble-corrected final text (or the provisional one if refinement failed)
+  // is committed once and takes the tail's place.
+  const pending = fingerspelling?.provisional ? fingerspelling.text : "";
+
+  useEffect(() => {
+    const status = fingerspelling?.status ?? null;
+    const previous = lastStatus.current;
+    lastStatus.current = status;
+    if (status !== "finished" || previous === "finished") return;
+    const word = fingerspelling?.text ?? "";
+    if (word) setText((value) => (value === "" || value.endsWith(" ") ? value + word : `${value} ${word}`));
+  }, [fingerspelling]);
 
   useEffect(() => {
     const prediction = result?.prediction;
@@ -47,7 +63,7 @@ export default function Scratchpad({ result }: { result: Recognition | null }) {
       <div className="scratchpad-header">
         <div>
           <span className="eyebrow">SCRATCHPAD</span>
-          <p>Hold a sign for one second to type it. “space” adds a space, “del” deletes.</p>
+          <p>Hold a sign for one second to type it. Completed fingerspelling words are added when the segment finishes.</p>
         </div>
         <div className="hold-indicator" aria-live="polite">
           {held ? (
@@ -101,8 +117,12 @@ export default function Scratchpad({ result }: { result: Recognition | null }) {
         className="scratchpad-text"
         aria-label="Text"
         placeholder="The letters you sign appear here…"
-        value={text}
-        onChange={(event) => setText(event.target.value)}
+        value={text + pending}
+        onChange={(event) => {
+          // Editing while a word is still pending must not bake the tail into the committed text.
+          const value = event.target.value;
+          setText(pending && value.endsWith(pending) ? value.slice(0, -pending.length) : value);
+        }}
         spellCheck={false}
       />
     </section>

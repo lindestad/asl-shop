@@ -234,6 +234,37 @@ class NeuralTests(unittest.TestCase):
                                              video=True, session_id=session, timestamp_ms=i * 1000 / 30)
                 self.assertEqual(result["fingerspelling"]["text"], "J" if moving else "")
 
+    def test_hand_departure_autofinishes_a_spelling_segment(self):
+        from model.live_neural import NeuralRuntime
+        from model.neural import VOCAB
+        class EmitLastJ:
+            def __call__(self, frames):
+                logits = torch.zeros((*frames.shape[:2], len(VOCAB)))
+                logits[..., 0] = 5
+                logits[:, -1, VOCAB.index("J")] = 10
+                return logits
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = NeuralRuntime(directory)
+            runtime.loaded = True
+            runtime.models["sequence"] = EmitLastJ()
+            points_at = lambda i: [SimpleNamespace(x=.2 + n * .001 + .05 * (i % 3), y=.3 + n * .002)
+                                   for n in range(21)]
+            # A moving segment past the context gate finishes when the hand leaves.
+            for i in range(30):
+                runtime.analyze([{"hand": "Right", "landmarks": points_at(i)}], 640, 480,
+                                video=True, session_id="spell", timestamp_ms=i * 1000 // 30)
+            result = runtime.analyze([], 640, 480, video=True, session_id="spell", timestamp_ms=2000)
+            self.assertEqual(result["fingerspelling"]["status"], "finished")
+            self.assertFalse(result["fingerspelling"]["provisional"])
+            self.assertEqual(result["fingerspelling"]["text"], "J")
+            # A sub-gate flash is still discarded rather than finished.
+            for i in range(4):
+                runtime.analyze([{"hand": "Right", "landmarks": points_at(i)}], 640, 480,
+                                video=True, session_id="flash", timestamp_ms=i * 1000 // 30)
+            result = runtime.analyze([], 640, 480, video=True, session_id="flash", timestamp_ms=2000)
+            self.assertEqual(result["fingerspelling"]["status"], "recognizing")
+            self.assertEqual(result["fingerspelling"]["frames"], 1)
+
     def test_worker_protocol_with_neural_checkpoints_and_real_detector(self):
         import importlib.util
         from model.neural import CONTRACT, HANDSHAPES, VOCAB, HandshapeNet, FingerspellingNet
