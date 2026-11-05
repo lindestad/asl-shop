@@ -28,7 +28,10 @@ CLIP_VIDEOS = Path(os.environ.get("ASL_DEMO_VIDEO_DIR", ROOT / "data" / "externa
 CANVAS = 1000.0  # square replay canvas; landmarks travel normalized by its size
 HAND_SCALE = 200.0  # wrist-to-MCP distance in canvas pixels for reconstructed hands
 
-# fixed demo selection: shortest, median, first both-hands clip, longest
+# fixed demo selection: shortest, median, first both-hands clip, longest, then
+# curated real-word spellings (JAMES/ZEBULON test the J/Z motion gates; the rest
+# are plain words). Clip indices are positions in the packed test split, which is
+# itself deterministic, so the selection is reproducible from the packed data alone.
 def pick_indices(clips, x):
     lengths = [c["end"] - c["start"] for c in clips]
     order = sorted(range(len(clips)), key=lambda i: lengths[i])
@@ -38,7 +41,14 @@ def pick_indices(clips, x):
         if bool(np.any((seg[:, 44] > 0) & (seg[:, 89] > 0))):
             both = i
             break
-    return [order[0], order[len(order) // 2], both, order[-1]]
+    words = [6689,  # JAMES FRENCH
+             528,   # ZEBULON FELIX
+             9321,  # SURPRISE ARIZONA
+             5086,  # CRUZ HOUSTON
+             4331,  # SEATTLE WASHINGTON
+             7993]  # HOLLYWOOD FLORIDA
+    indices = [order[0], order[len(order) // 2], both, order[-1]]
+    return indices + [i for i in words if i not in indices]
 
 
 def unshape(shape21, side):
@@ -71,11 +81,22 @@ def main():
     parser = argparse.ArgumentParser(description="Replay packed dataset clips as landmark frames.")
     parser.add_argument("--list", action="store_true", help="list the fixed demo clip selection")
     parser.add_argument("--clip", type=int, help="index into the demo selection")
+    parser.add_argument("--by-index", type=int, dest="by_index",
+                        help="replay an arbitrary packed clip index, bypassing the fixed selection")
     args = parser.parse_args()
     if not (PACKED / "test_clips.json").is_file():
         raise SystemExit(f"Packed dataset not found at {PACKED}; set ASL_PACKED_DIR.")
     clips = json.loads((PACKED / "test_clips.json").read_text(encoding="utf-8"))
     x = np.load(PACKED / "test_frames.npy", mmap_mode="r")
+    if args.by_index is not None:
+        if not 0 <= args.by_index < len(clips):
+            raise SystemExit(f"Clip index must be between 0 and {len(clips) - 1}.")
+        print(json.dumps(dict(index=args.by_index,
+                              **{k: clips[args.by_index][k] for k in ("name", "signer", "text")},
+                              video=(CLIP_VIDEOS / f"{clips[args.by_index]['name']}.mp4").name
+                              if (CLIP_VIDEOS / f"{clips[args.by_index]['name']}.mp4").is_file() else None,
+                              frames=clip_frames(clips[args.by_index], x))))
+        return
     indices = pick_indices(clips, x)
     if args.list or args.clip is None:
         print(json.dumps([dict(index=i, name=clips[i]["name"], signer=clips[i]["signer"],
