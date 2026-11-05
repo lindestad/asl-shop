@@ -12,6 +12,7 @@ dependencies = [
     "scikit-learn>=1.7.2",
     "torch>=2.14.1",
     "tqdm",
+    "matplotlib",
 ]
 
 [tool.uv]
