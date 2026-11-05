@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Camera, CameraOff, Clapperboard, LoaderCircle } from "lucide-react";
 import { FingerspellingSummary, LandmarkOverlay, RecognitionSummary } from "./components";
 import Scratchpad from "./Scratchpad";
-import type { DemoClipInfo, Recognition } from "./types";
+import type { DemoClip, DemoClipInfo, Recognition } from "./types";
 
 export default function CameraView() {
   const video = useRef<HTMLVideoElement>(null);
@@ -11,6 +11,7 @@ export default function CameraView() {
   const textSession = useRef(crypto.randomUUID());
   const finishRequested = useRef(false);
   const replayingRef = useRef(false);
+  const frameBusy = useRef(false);
   const [running, setRunning] = useState(false);
   const [starting, setStarting] = useState(false);
   const [result, setResult] = useState<Recognition | null>(null);
@@ -29,6 +30,20 @@ export default function CameraView() {
       .catch(() => setDemoClips([]));
   }, []);
 
+  async function sendReplayFrame(
+    desktop: NonNullable<Window["desktop"]>,
+    sessionId: string,
+    frames: DemoClip["frames"],
+    i: number,
+  ) {
+    const recognition = await desktop.recognizeLandmarks(frames[i].hands, {
+      sessionId,
+      timestampMs: frames[i].t,
+      finish: i === frames.length - 1,
+    });
+    if (sessionId === textSession.current) setResult(recognition);
+  }
+
   async function playClip() {
     const desktop = window.desktop;
     if (!desktop) return;
@@ -36,22 +51,70 @@ export default function CameraView() {
       const clip = await desktop.demoClip(demoIndex);
       newText();
       const sessionId = textSession.current;
+      const frames = clip.frames;
+      const total = frames.length;
       replayingRef.current = true;
       setReplaying(true);
       setError(null);
-      for (let i = 0; i < clip.frames.length && replayingRef.current; i++) {
-        const frame = clip.frames[i];
-        const recognition = await desktop.recognizeLandmarks(frame.hands, {
-          sessionId,
-          timestampMs: frame.t,
-          finish: i === clip.frames.length - 1,
-        });
-        if (sessionId === textSession.current) setResult(recognition);
-        if (i + 1 < clip.frames.length) await new Promise((tick) => setTimeout(tick, 33));
+
+      if (!clip.video) {
+        for (let i = 0; i < total && replayingRef.current; i++) {
+          await sendReplayFrame(desktop, sessionId, frames, i);
+          if (i + 1 < total) await new Promise((tick) => setTimeout(tick, 33));
+        }
+        return;
       }
+
+      // A demo clip *is* the camera: the same frame loop, worker session and
+      // finish semantics as a live signing run, fed from dataset footage instead
+      // of getUserMedia. MediaPipe detects the displayed pixels, so overlays are
+      // the landmarks the pipeline actually consumed.
+      if (stream.current || running) stop();
+      const element = video.current!;
+      element.srcObject = null;
+      element.src = `demo-media://clips/${clip.video}`;
+      await new Promise<void>((resolve, reject) => {
+        element.addEventListener("loadedmetadata", () => resolve(), { once: true });
+        element.addEventListener("error", () => reject(new Error("Demo footage failed to load.")), {
+          once: true,
+        });
+      });
+      setAspectRatio(element.videoWidth / element.videoHeight);
+      setRunning(true);
+      await element.play();
+      await new Promise<void>((resolve) => {
+        element.addEventListener("ended", () => resolve(), { once: true });
+        element.addEventListener("pause", () => resolve(), { once: true });
+      });
+      if (!replayingRef.current) return; // the stop button ended the replay
+      // The clip is over and no further video frames will be scheduled, so the
+      // finish flag goes out on one last snapshot of the final frame, after the
+      // loop's last in-flight analysis has landed.
+      while (frameBusy.current) await new Promise((tick) => setTimeout(tick, 60));
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d")!;
+      const width = Math.min(640, element.videoWidth);
+      canvas.width = width;
+      canvas.height = Math.round(element.videoHeight * (width / element.videoWidth));
+      context.drawImage(element, 0, 0, canvas.width, canvas.height);
+      const segmentId = textSession.current;
+      const recognition = await desktop.recognizeFrame(canvas.toDataURL("image/jpeg", 0.85), {
+        sessionId: segmentId,
+        timestampMs: performance.now(),
+        finish: true,
+      });
+      if (segmentId === textSession.current) setResult(recognition);
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
+      const element = video.current;
+      if (element && !element.srcObject) {
+        element.pause();
+        if (element.getAttribute("src")) {
+          element.removeAttribute("src");
+          element.load();
+        }
+      }
       replayingRef.current = false;
       setReplaying(false);
     }
@@ -67,7 +130,14 @@ export default function CameraView() {
     session.current++;
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
-    if (video.current) video.current.srcObject = null;
+    if (video.current) {
+      video.current.pause();
+      video.current.srcObject = null;
+      if (video.current.getAttribute("src")) {
+        video.current.removeAttribute("src");
+        video.current.load();
+      }
+    }
     setRunning(false);
     setStarting(false);
     setResult(null);
@@ -130,14 +200,13 @@ export default function CameraView() {
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d")!;
     let canceled = false;
-    let busy = false;
     let callback = 0;
     let completedFrames = 0;
     let sampleStarted = 0;
 
     async function analyzeFrame() {
-      if (busy || !element.videoWidth) return;
-      busy = true;
+      if (frameBusy.current || !element.videoWidth) return;
+      frameBusy.current = true;
       try {
         const width = Math.min(640, element.videoWidth);
         canvas.width = width;
@@ -167,7 +236,7 @@ export default function CameraView() {
           element.cancelVideoFrameCallback(callback);
         }
       } finally {
-        busy = false;
+        frameBusy.current = false;
       }
     }
 
@@ -204,6 +273,7 @@ export default function CameraView() {
                 ref={video}
                 muted
                 playsInline
+                crossOrigin="anonymous"
                 className="camera-video"
                 aria-label="Live camera feed"
               />
@@ -303,6 +373,7 @@ export default function CameraView() {
             {demoClips.map((clip, position) => (
               <option key={clip.index} value={position}>
                 clip {position + 1} · {(clip.durationMs / 1000).toFixed(1)} s · {clip.text}
+                {clip.video ? " · footage" : ""}
               </option>
             ))}
           </select>

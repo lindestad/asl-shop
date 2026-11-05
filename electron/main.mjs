@@ -1,5 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session } from "electron";
 import { readFile, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { RecognitionService } from "./recognition.mjs";
@@ -12,6 +14,16 @@ const devUrl =
 const pageUrl = devUrl || "app://bundle/index.html";
 protocol.registerSchemesAsPrivileged([
   { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  {
+    scheme: "demo-media",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true,
+    },
+  },
 ]);
 const recognition = new RecognitionService(
   app.isPackaged ? process.resourcesPath : root,
@@ -34,6 +46,56 @@ function registerAppProtocol() {
     if (!relative || relative.startsWith("..") || path.isAbsolute(relative))
       return new Response("Not found", { status: 404 });
     return net.fetch(pathToFileURL(filename).href);
+  });
+}
+// Demo replay footage: demo-media://clips/<file>.mp4 serves only files from the
+// dataset's demo-clips directory; nothing else on disk is reachable. Media
+// playback needs real Range/206 support, which net.fetch does not provide.
+async function serveDemoClip(request) {
+  const url = new URL(request.url);
+  if (url.host !== "clips" || (request.method !== "GET" && request.method !== "HEAD"))
+    return new Response("Not found", { status: 404 });
+  const name = path.basename(decodeURIComponent(url.pathname));
+  if (!name.endsWith(".mp4")) return new Response("Not found", { status: 404 });
+  const file = path.join(root, "data", "external", "openfs", "demo-clips", name);
+  let info;
+  try {
+    info = await stat(file);
+  } catch {
+    return new Response("Not found", { status: 404 });
+  }
+  // CORS headers keep the drawn canvas untainted so frames can be exported to
+  // the recognition worker (toDataURL rejects tainted canvases).
+  const headers = {
+    "Content-Type": "video/mp4",
+    "Accept-Ranges": "bytes",
+    "Access-Control-Allow-Origin": "*",
+  };
+  let start = 0;
+  let end = info.size - 1;
+  let partial = false;
+  const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get("range") || "");
+  if (range) {
+    partial = true;
+    if (range[1]) {
+      start = Number(range[1]);
+      if (range[2]) end = Math.min(Number(range[2]), info.size - 1);
+    } else if (range[2]) {
+      start = Math.max(0, info.size - Number(range[2]));
+    }
+    if (start > end || start >= info.size)
+      return new Response(null, {
+        status: 416,
+        headers: { "Content-Range": `bytes */${info.size}` },
+      });
+  }
+  headers["Content-Length"] = String(end - start + 1);
+  if (partial) headers["Content-Range"] = `bytes ${start}-${end}/${info.size}`;
+  if (request.method === "HEAD")
+    return new Response(null, { status: partial ? 206 : 200, headers });
+  return new Response(Readable.toWeb(createReadStream(file, { start, end })), {
+    status: partial ? 206 : 200,
+    headers,
   });
 }
 function handle(channel, callback) {
@@ -105,6 +167,7 @@ app
   .whenReady()
   .then(async () => {
     if (!devUrl) registerAppProtocol();
+    protocol.handle("demo-media", serveDemoClip);
     Menu.setApplicationMenu(
       Menu.buildFromTemplate([
         ...(process.platform === "darwin" ? [{ role: "appMenu" }] : []),

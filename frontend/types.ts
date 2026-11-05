@@ -52,8 +52,12 @@ export type DemoClipInfo = {
   frames: number;
   durationMs: number;
   text: string;
+  video: boolean;
 };
-export type DemoClip = DemoClipInfo & { frames: ReplayFrame[] };
+export type DemoClip = Omit<DemoClipInfo, "video"> & {
+  frames: ReplayFrame[];
+  video: string | null;
+};
 
 export type SourceImage = { name: string; dataUrl: string };
 

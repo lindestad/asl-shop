@@ -22,6 +22,9 @@ sys.path.insert(0, str(ROOT))
 import numpy as np
 
 PACKED = Path(os.environ.get("ASL_PACKED_DIR", ROOT / "data" / "openfs-packed"))
+# Optional source footage (googleai/fsboard on Kaggle, CC BY 4.0); demo mode plays
+# without video when a clip's mp4 is missing.
+CLIP_VIDEOS = Path(os.environ.get("ASL_DEMO_VIDEO_DIR", ROOT / "data" / "external" / "openfs" / "demo-clips"))
 CANVAS = 1000.0  # square replay canvas; landmarks travel normalized by its size
 HAND_SCALE = 200.0  # wrist-to-MCP distance in canvas pixels for reconstructed hands
 
@@ -78,13 +81,16 @@ def main():
         print(json.dumps([dict(index=i, name=clips[i]["name"], signer=clips[i]["signer"],
                                frames=clips[i]["end"] - clips[i]["start"],
                                durationMs=round((clips[i]["end"] - clips[i]["start"]) * 1000 / 30),
-                               text=clips[i]["text"])
+                               text=clips[i]["text"],
+                               video=(CLIP_VIDEOS / f"{clips[i]['name']}.mp4").is_file())
                           for i in indices]))
         return
     if not 0 <= args.clip < len(indices):
         raise SystemExit(f"Demo clip must be between 0 and {len(indices) - 1}.")
     index = indices[args.clip]
+    video_name = f"{clips[index]['name']}.mp4"
     print(json.dumps(dict(index=index, **{k: clips[index][k] for k in ("name", "signer", "text")},
+                          video=video_name if (CLIP_VIDEOS / video_name).is_file() else None,
                           frames=clip_frames(clips[index], x))))
 
 

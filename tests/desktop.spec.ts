@@ -149,3 +149,40 @@ test("camera recognizes letters, keeps up with video, finds new hands, and resta
     await application.close();
   }
 });
+
+test("demo replay runs dataset footage through the live path", async () => {
+  // Model load plus a real-time clip replay does not fit the default 60 s.
+  test.setTimeout(150000);
+  const footage = path.resolve(
+    "data/external/openfs/demo-clips/67fc_535_20221021_200720_909133_911200.mp4",
+  );
+  const packedReady =
+    existsSync(path.resolve("data/openfs-packed/test_clips.json")) &&
+    existsSync(path.resolve("data/openfs-packed/test_frames.npy"));
+  test.skip(
+    !packedReady || !existsSync(footage),
+    "Pack the OpenFS test split and fetch demo footage to run the replay test.",
+  );
+  const application = await electron.launch({
+    executablePath: process.env.ASL_SHOP_TEST_APP,
+    args: process.env.ASL_SHOP_TEST_APP ? [] : ["."],
+    env: { ...process.env, ASL_DEV_URL: "http://127.0.0.1:5173" },
+  });
+  try {
+    const page = await application.firstWindow();
+    await page.waitForLoadState("domcontentloaded");
+    const card = page.getByRole("region", { name: "Dataset replay" });
+    await expect(card).toBeVisible({ timeout: 30000 });
+    // All four clips have footage, so scope to one option rather than a unique match.
+    await expect(card.getByRole("option", { name: /footage/ }).first()).toBeAttached();
+    await card.getByRole("button", { name: "Play clip" }).click();
+    await expect(card.getByRole("button", { name: "Replaying…" })).toBeVisible();
+    // A tainted canvas or a dead protocol rejects every exported frame, so the
+    // replay only re-enables and only finishes when detection really ran.
+    await expect(card.getByRole("button", { name: "Play clip" })).toBeEnabled({ timeout: 45000 });
+    await expect(page.locator("p.error")).toBeHidden();
+    await expect(page.getByText("Sekvensen er ferdig.")).toBeVisible({ timeout: 20000 });
+  } finally {
+    await application.close();
+  }
+});

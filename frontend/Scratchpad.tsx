@@ -34,7 +34,8 @@ export default function Scratchpad({ result }: { result: Recognition | null }) {
     lastStatus.current = status;
     if (status !== "finished" || previous === "finished") return;
     const word = fingerspelling?.text ?? "";
-    if (word) setText((value) => (value === "" || value.endsWith(" ") ? value + word : `${value} ${word}`));
+    if (word)
+      setText((value) => (value === "" || value.endsWith(" ") ? value + word : `${value} ${word}`));
   }, [fingerspelling]);
 
   useEffect(() => {
@@ -63,7 +64,10 @@ export default function Scratchpad({ result }: { result: Recognition | null }) {
       <div className="scratchpad-header">
         <div>
           <span className="eyebrow">SCRATCHPAD</span>
-          <p>Hold a sign for one second to type it. Completed fingerspelling words are added when the segment finishes.</p>
+          <p>
+            Hold a sign for one second to type it. Completed fingerspelling words are added when the
+            segment finishes.
+          </p>
         </div>
         <div className="hold-indicator" aria-live="polite">
           {held ? (
