@@ -54,6 +54,7 @@ test("types held signs into the scratchpad", async ({ page }) => {
         hands: [],
         width: 320,
         height: 240,
+        model: "knn",
         classifierAvailable: true,
         prediction: { letter: state.sign, confidence: 1 },
       }),
@@ -85,4 +86,47 @@ test("types held signs into the scratchpad", async ({ page }) => {
   await expect(text).toHaveValue("H ");
   await page.getByRole("button", { name: "Clear" }).click();
   await expect(text).toHaveValue("");
+});
+
+test("sends frames to the model chosen in the dropdown", async ({ page }) => {
+  await page.addInitScript(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = 240;
+    const context = canvas.getContext("2d")!;
+    setInterval(() => {
+      context.fillStyle = `rgb(${Math.floor(performance.now()) % 255}, 0, 0)`;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    }, 1000 / 30);
+    navigator.mediaDevices.getUserMedia = async () => canvas.captureStream(30);
+    window.desktop = {
+      openImage: async () => null,
+      recognize: async () => {
+        throw new Error("unused");
+      },
+      recognizeFrame: async (_, model = "knn") => ({
+        hands: [],
+        width: 320,
+        height: 240,
+        model,
+        classifierAvailable: true,
+        prediction:
+          model === "cnn" ? { letter: "B", confidence: 0.87 } : { letter: "A", confidence: 1 },
+      }),
+    };
+  });
+  await page.goto("/");
+  const dropdown = page.getByLabel("Model");
+  await expect(dropdown).toHaveValue("knn");
+
+  await page.getByRole("button", { name: "Start camera" }).click();
+  await expect(page.locator(".result-letter")).toHaveText("A");
+  await expect(page.getByText("Closest match in the training examples")).toBeVisible();
+
+  await dropdown.selectOption("cnn");
+  await expect(page.locator(".result-letter")).toHaveText("B");
+  await expect(page.getByText("87% confidence")).toBeVisible();
+
+  await dropdown.selectOption("knn");
+  await expect(page.locator(".result-letter")).toHaveText("A");
 });

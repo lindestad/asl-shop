@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Camera, CameraOff, LoaderCircle } from "lucide-react";
 import { LandmarkOverlay, RecognitionSummary } from "./components";
 import Scratchpad from "./Scratchpad";
-import type { Recognition } from "./types";
+import type { ModelId, Recognition } from "./types";
 
 export default function CameraView() {
   const video = useRef<HTMLVideoElement>(null);
@@ -14,6 +14,7 @@ export default function CameraView() {
   const [error, setError] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
   const [fps, setFps] = useState(0);
+  const [model, setModel] = useState<ModelId>("knn");
 
   function stop() {
     session.current++;
@@ -98,6 +99,7 @@ export default function CameraView() {
         context.drawImage(element, 0, 0, canvas.width, canvas.height);
         const recognition = await window.desktop!.recognizeFrame(
           canvas.toDataURL("image/jpeg", 0.85),
+          model,
         );
         if (!canceled) {
           setResult(recognition);
@@ -134,7 +136,8 @@ export default function CameraView() {
       canceled = true;
       element.cancelVideoFrameCallback(callback);
     };
-  }, [running]);
+    // Restarting on a model change also discards results still in flight from the old model.
+  }, [running, model]);
 
   return (
     <div className="view">
@@ -178,21 +181,36 @@ export default function CameraView() {
                 </>
               )}
             </span>
-            <button
-              className="primary-button"
-              type="button"
-              disabled={starting}
-              onClick={() => (running ? stop() : void start())}
-            >
-              {starting ? (
-                <LoaderCircle className="spin" size={17} />
-              ) : running ? (
-                <CameraOff size={17} />
-              ) : (
-                <Camera size={17} />
-              )}
-              {starting ? "Starting…" : running ? "Stop camera" : "Start camera"}
-            </button>
+            <div className="preview-controls">
+              <label className="model-select">
+                Model
+                <select
+                  value={model}
+                  onChange={(event) => {
+                    setModel(event.target.value as ModelId);
+                    setResult(null);
+                  }}
+                >
+                  <option value="knn">KNN</option>
+                  <option value="cnn">CNN</option>
+                </select>
+              </label>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={starting}
+                onClick={() => (running ? stop() : void start())}
+              >
+                {starting ? (
+                  <LoaderCircle className="spin" size={17} />
+                ) : running ? (
+                  <CameraOff size={17} />
+                ) : (
+                  <Camera size={17} />
+                )}
+                {starting ? "Starting…" : running ? "Stop camera" : "Start camera"}
+              </button>
+            </div>
           </div>
         </section>
         <aside className="result-column">

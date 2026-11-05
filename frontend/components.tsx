@@ -44,7 +44,11 @@ export function RecognitionSummary({ result }: { result: Recognition | null }) {
       {result?.prediction ? (
         <>
           <strong className="result-letter">{result.prediction.letter}</strong>
-          <p>{Math.round(result.prediction.confidence * 5)} of 5 nearest training examples</p>
+          <p>
+            {result.model === "cnn"
+              ? `${Math.round(result.prediction.confidence * 100)}% confidence`
+              : "Closest match in the training examples"}
+          </p>
         </>
       ) : (
         <>
