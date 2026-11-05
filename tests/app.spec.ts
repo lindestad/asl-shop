@@ -120,6 +120,8 @@ test("shows independent neural letter and sequence outputs, finishes and resets 
           frames: 12,
           status: options.finish ? "finished" : "recognizing",
           provisional: !options.finish,
+          method: "causal-tcn",
+          ensemble: { enabled: true, available: false, members: 4, status: "configured" },
         },
       }),
       recognizeLandmarks: async () => {
@@ -136,6 +138,24 @@ test("shows independent neural letter and sequence outputs, finishes and resets 
   await expect(page.locator(".result-letter")).toHaveText("B");
   await expect(page.locator(".spelled-text")).toHaveText("AAB");
   await expect(page.getByText("Neural letter model", { exact: false })).toBeVisible();
+  // Default ens4 readiness adds text to this panel; cards must retain enough
+  // height instead of spilling their content over the sequence controls.
+  for (const size of [
+    { width: 1280, height: 840 },
+    { width: 760, height: 600 },
+  ]) {
+    await page.setViewportSize(size);
+    await expect
+      .poll(() =>
+        page
+          .locator(".result-card")
+          .evaluateAll((cards) =>
+            cards.every((card) => card.scrollHeight <= card.clientHeight + 1),
+          ),
+      )
+      .toBe(true);
+    await expect(page.getByRole("textbox", { name: "Text" })).toBeInViewport({ ratio: 1 });
+  }
   await page.getByRole("button", { name: "Fullfør tekst" }).click();
   await expect(page.getByText("Sekvensen er ferdig.")).toBeVisible();
   await page.getByRole("button", { name: "Ny sekvens" }).click();
