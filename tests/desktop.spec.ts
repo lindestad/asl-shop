@@ -38,7 +38,9 @@ test("Electron recognizes a letter from an image with the trained model", async 
     const result = await page.evaluate((url) => window.desktop!.recognize(url), dataUrl);
     expect(result.hands).toHaveLength(1);
     expect(result.prediction?.letter).toBe("A");
-    expect(result.prediction?.confidence).toBe(1);
+    // The neural handshape model reports a softmax (≈0.97 here); the KNN
+    // fallback it replaces voted unanimously, so this was once an exact 1.
+    expect(result.prediction?.confidence).toBeGreaterThan(0.9);
     expect(
       await page.evaluate(() => typeof (window as unknown as { require?: unknown }).require),
     ).toBe("undefined");
@@ -145,6 +147,48 @@ test("camera recognizes letters, keeps up with video, finds new hands, and resta
     await expect(page.locator(".result-letter")).toHaveText("A");
     await expect(page.getByText("1 hand found")).toBeVisible();
     await page.getByRole("button", { name: "Stop camera" }).click();
+  } finally {
+    await application.close();
+  }
+});
+
+test("demo replay runs dataset footage through the live path", async () => {
+  // Model load plus a real-time clip replay does not fit the default 60 s.
+  test.setTimeout(150000);
+  const footage = path.resolve(
+    "data/external/openfs/demo-clips/67fc_535_20221021_200720_909133_911200.mp4",
+  );
+  const packedReady =
+    existsSync(path.resolve("data/openfs-packed/test_clips.json")) &&
+    existsSync(path.resolve("data/openfs-packed/test_frames.npy"));
+  test.skip(
+    !packedReady || !existsSync(footage),
+    "Pack the OpenFS test split and fetch demo footage to run the replay test.",
+  );
+  const application = await electron.launch({
+    executablePath: process.env.ASL_SHOP_TEST_APP,
+    args: process.env.ASL_SHOP_TEST_APP ? [] : ["."],
+    env: { ...process.env, ASL_DEV_URL: "http://127.0.0.1:5173" },
+  });
+  try {
+    const page = await application.firstWindow();
+    await page.waitForLoadState("domcontentloaded");
+    const card = page.getByRole("region", { name: "Dataset replay" });
+    await expect(card).toBeVisible({ timeout: 30000 });
+    // All four clips have footage, so scope to one option rather than a unique match.
+    await expect(card.getByRole("option", { name: /footage/ }).first()).toBeAttached();
+    await card.getByRole("button", { name: "Play clip" }).click();
+    await expect(card.getByRole("button", { name: "Replaying…" })).toBeVisible();
+    // Dataset footage is third-person: it plays unmirrored so the landmarks
+    // detected from its pixels land on the hands the viewer sees.
+    await expect(page.locator("video.camera-video")).not.toHaveClass(/mirrored/);
+    // A tainted canvas or a dead protocol rejects every exported frame, so the
+    // replay only re-enables and only finishes when detection really ran.
+    await expect(card.getByRole("button", { name: "Play clip" })).toBeEnabled({ timeout: 45000 });
+    await expect(page.locator("p.error")).toBeHidden();
+    await expect(page.getByText("Sekvensen er ferdig.")).toBeVisible({ timeout: 20000 });
+    // The run ends with the clip instead of leaving "Camera on" over a cleared stage.
+    await expect(page.getByText("Camera off")).toBeVisible();
   } finally {
     await application.close();
   }

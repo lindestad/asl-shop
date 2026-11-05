@@ -4,6 +4,26 @@ set -euo pipefail
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$repo_dir"
 
+neural_setup=0
+download_openfs=0
+extract_openfs=0
+openfs_dir="$repo_dir/data/external/openfs"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --neural) neural_setup=1; shift ;;
+        --openfs) neural_setup=1; download_openfs=1; shift ;;
+        --extract-openfs) neural_setup=1; download_openfs=1; extract_openfs=1; shift ;;
+        --openfs-dir)
+            [[ $# -ge 2 ]] || { echo "--openfs-dir requires a path" >&2; exit 1; }
+            openfs_dir="$2"; shift 2 ;;
+        --help)
+            echo "Usage: ./setup.sh [--neural] [--openfs] [--extract-openfs] [--openfs-dir PATH]"
+            echo "OpenFS is an optional large download; existing ZIPs are reused and downloads resume."
+            exit 0 ;;
+        *) echo "Unknown setup option: $1" >&2; exit 1 ;;
+    esac
+done
+
 download() {
     local url="$1" destination="$2"
     if command -v curl >/dev/null 2>&1; then
@@ -34,7 +54,9 @@ uv_dir="$(dirname -- "$uv_bin")"
 export PATH="$uv_dir:$PATH"
 
 echo "Setting up Python 3.12 and project dependencies..."
-"$uv_bin" sync --locked --python 3.12
+python_extras=()
+if [[ "$neural_setup" -eq 1 ]]; then python_extras=(--extra neural); fi
+"$uv_bin" sync --locked --python 3.12 "${python_extras[@]}"
 
 has_node() {
     command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 &&
@@ -95,19 +117,15 @@ if [[ ! -s "$model" ]]; then
     download \
         "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task" \
         "$model.part"
-    "$uv_bin" run --no-sync python - "$model.part" <<'PY'
-from pathlib import Path
-import sys
-from zipfile import ZipFile
-
-model = Path(sys.argv[1])
-with ZipFile(model) as archive:
-    if archive.testzip() is not None:
-        raise RuntimeError("Downloaded model is corrupt; rerun ./setup.sh.")
-model.replace(model.with_suffix(""))
-PY
+    "$uv_bin" run --no-sync python scripts/validate_landmarker.py "$model.part"
 else
     echo "MediaPipe model is already installed."
+fi
+
+if [[ "$download_openfs" -eq 1 ]]; then
+    openfs_args=(--directory "$openfs_dir")
+    if [[ "$extract_openfs" -eq 1 ]]; then openfs_args+=(--extract); fi
+    "$uv_bin" run --locked --with gdown python scripts/download_openfs.py "${openfs_args[@]}"
 fi
 
 # An executable script cannot update its parent shell's PATH. Save the actual

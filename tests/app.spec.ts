@@ -58,6 +58,13 @@ test("types held signs into the scratchpad", async ({ page }) => {
         classifierAvailable: true,
         prediction: { letter: state.sign, confidence: 1 },
       }),
+      recognizeLandmarks: async () => {
+        throw new Error("unused landmark request");
+      },
+      demoList: async () => [],
+      demoClip: async () => {
+        throw new Error("unused clip request");
+      },
     };
   });
   await page.goto("/");
@@ -88,6 +95,53 @@ test("types held signs into the scratchpad", async ({ page }) => {
   await expect(text).toHaveValue("");
 });
 
+test("shows independent neural letter and sequence outputs, finishes and resets text", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["camera"]);
+  await page.addInitScript(() => {
+    window.desktop = {
+      openImage: async () => null,
+      recognize: async () => {
+        throw new Error("Unused image request");
+      },
+      recognizeFrame: async (_image, options) => ({
+        hands: [],
+        width: 640,
+        height: 480,
+        model: "neural",
+        classifierAvailable: true,
+        handshapeAvailable: true,
+        prediction: { letter: "B", confidence: 0.95, method: "neural" },
+        fingerspelling: {
+          available: true,
+          text: "AAB",
+          frames: 12,
+          status: options.finish ? "finished" : "recognizing",
+          provisional: !options.finish,
+        },
+      }),
+      recognizeLandmarks: async () => {
+        throw new Error("Unused landmark request");
+      },
+      demoList: async () => [],
+      demoClip: async () => {
+        throw new Error("Unused clip request");
+      },
+    };
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start camera" }).click();
+  await expect(page.locator(".result-letter")).toHaveText("B");
+  await expect(page.locator(".spelled-text")).toHaveText("AAB");
+  await expect(page.getByText("Neural letter model", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Fullfør tekst" }).click();
+  await expect(page.getByText("Sekvensen er ferdig.")).toBeVisible();
+  await page.getByRole("button", { name: "Ny sekvens" }).click();
+  await expect(page.getByText("Foreløpig tekst", { exact: false })).toBeVisible();
+});
+
 test("sends frames to the model chosen in the dropdown", async ({ page }) => {
   await page.addInitScript(() => {
     const canvas = document.createElement("canvas");
@@ -104,22 +158,34 @@ test("sends frames to the model chosen in the dropdown", async ({ page }) => {
       recognize: async () => {
         throw new Error("unused");
       },
-      recognizeFrame: async (_, model = "knn") => ({
-        hands: [],
-        width: 320,
-        height: 240,
-        model,
-        classifierAvailable: true,
-        prediction:
-          model === "cnn" ? { letter: "B", confidence: 0.87 } : { letter: "A", confidence: 1 },
-      }),
+      recognizeFrame: async (_, options) => {
+        const model = options.model ?? "neural";
+        const prediction =
+          model === "cnn"
+            ? { letter: "B", confidence: 0.87, method: "cnn" as const }
+            : model === "knn"
+              ? { letter: "A", confidence: 1, method: "knn" as const }
+              : { letter: "Q", confidence: 0.95, method: "neural" as const };
+        return { hands: [], width: 320, height: 240, model, classifierAvailable: true, prediction };
+      },
+      recognizeLandmarks: async () => {
+        throw new Error("unused landmark request");
+      },
+      demoList: async () => [],
+      demoClip: async () => {
+        throw new Error("unused clip request");
+      },
     };
   });
   await page.goto("/");
   const dropdown = page.getByLabel("Model");
-  await expect(dropdown).toHaveValue("knn");
+  await expect(dropdown).toHaveValue("neural");
 
   await page.getByRole("button", { name: "Start camera" }).click();
+  await expect(page.locator(".result-letter")).toHaveText("Q");
+  await expect(page.getByText("Neural letter model", { exact: false })).toBeVisible();
+
+  await dropdown.selectOption("knn");
   await expect(page.locator(".result-letter")).toHaveText("A");
   await expect(page.getByText("Closest match in the training examples")).toBeVisible();
 
@@ -127,6 +193,6 @@ test("sends frames to the model chosen in the dropdown", async ({ page }) => {
   await expect(page.locator(".result-letter")).toHaveText("B");
   await expect(page.getByText("87% confidence")).toBeVisible();
 
-  await dropdown.selectOption("knn");
-  await expect(page.locator(".result-letter")).toHaveText("A");
+  await dropdown.selectOption("neural");
+  await expect(page.locator(".result-letter")).toHaveText("Q");
 });

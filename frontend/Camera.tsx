@@ -1,30 +1,155 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Camera, CameraOff, LoaderCircle } from "lucide-react";
-import { LandmarkOverlay, RecognitionSummary } from "./components";
+import { Camera, CameraOff, Clapperboard, LoaderCircle } from "lucide-react";
+import { FingerspellingSummary, LandmarkOverlay, RecognitionSummary } from "./components";
 import Scratchpad from "./Scratchpad";
-import type { ModelId, Recognition } from "./types";
+import type { DemoClip, DemoClipInfo, ModelId, Recognition } from "./types";
 
 export default function CameraView() {
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
   const session = useRef(0);
+  const textSession = useRef(crypto.randomUUID());
+  const finishRequested = useRef(false);
+  const replayingRef = useRef(false);
+  const inFlight = useRef(0);
   const [running, setRunning] = useState(false);
   const [starting, setStarting] = useState(false);
   const [result, setResult] = useState<Recognition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
   const [fps, setFps] = useState(0);
-  const [model, setModel] = useState<ModelId>("knn");
+  const [model, setModel] = useState<ModelId>("neural");
+  const [demoClips, setDemoClips] = useState<DemoClipInfo[]>([]);
+  const [demoIndex, setDemoIndex] = useState(0);
+  const [replaying, setReplaying] = useState(false);
+
+  useEffect(() => {
+    if (!window.desktop) return;
+    window.desktop
+      .demoList()
+      .then(setDemoClips)
+      .catch(() => setDemoClips([]));
+  }, []);
+
+  async function sendReplayFrame(
+    desktop: NonNullable<Window["desktop"]>,
+    sessionId: string,
+    frames: DemoClip["frames"],
+    i: number,
+  ) {
+    const recognition = await desktop.recognizeLandmarks(frames[i].hands, {
+      sessionId,
+      timestampMs: frames[i].t,
+      finish: i === frames.length - 1,
+    });
+    if (sessionId === textSession.current) setResult(recognition);
+  }
+
+  async function playClip() {
+    const desktop = window.desktop;
+    if (!desktop) return;
+    try {
+      const clip = await desktop.demoClip(demoIndex);
+      newText();
+      const sessionId = textSession.current;
+      const frames = clip.frames;
+      const total = frames.length;
+      replayingRef.current = true;
+      setReplaying(true);
+      setError(null);
+
+      if (!clip.video) {
+        for (let i = 0; i < total && replayingRef.current; i++) {
+          await sendReplayFrame(desktop, sessionId, frames, i);
+          if (i + 1 < total) await new Promise((tick) => setTimeout(tick, 33));
+        }
+        return;
+      }
+
+      // A demo clip *is* the camera: the same frame loop, worker session and
+      // finish semantics as a live signing run, fed from dataset footage instead
+      // of getUserMedia. MediaPipe detects the displayed pixels, so overlays are
+      // the landmarks the pipeline actually consumed.
+      if (stream.current || running) stop();
+      const element = video.current!;
+      element.srcObject = null;
+      element.src = `demo-media://clips/${clip.video}`;
+      await new Promise<void>((resolve, reject) => {
+        element.addEventListener("loadedmetadata", () => resolve(), { once: true });
+        element.addEventListener("error", () => reject(new Error("Demo footage failed to load.")), {
+          once: true,
+        });
+      });
+      setAspectRatio(element.videoWidth / element.videoHeight);
+      setRunning(true);
+      await element.play();
+      await new Promise<void>((resolve) => {
+        element.addEventListener("ended", () => resolve(), { once: true });
+        element.addEventListener("pause", () => resolve(), { once: true });
+      });
+      if (!replayingRef.current) return; // the stop button ended the replay
+      // The clip is over and no further video frames will be scheduled, so the
+      // finish flag goes out on one last snapshot of the final frame, after the
+      // loop's last in-flight analysis has landed.
+      while (inFlight.current > 0) await new Promise((tick) => setTimeout(tick, 60));
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d")!;
+      const width = Math.min(640, element.videoWidth);
+      canvas.width = width;
+      canvas.height = Math.round(element.videoHeight * (width / element.videoWidth));
+      context.drawImage(element, 0, 0, canvas.width, canvas.height);
+      const segmentId = textSession.current;
+      const recognition = await desktop.recognizeFrame(canvas.toDataURL("image/jpeg", 0.85), {
+        sessionId: segmentId,
+        timestampMs: performance.now(),
+        finish: true,
+        model,
+      });
+      if (segmentId === textSession.current) setResult(recognition);
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      const element = video.current;
+      if (element && !element.srcObject) {
+        element.pause();
+        if (element.getAttribute("src")) {
+          element.removeAttribute("src");
+          element.load();
+        }
+      }
+      // The clip is off: the run ends with it, so the loop stops analyzing the
+      // now-empty element. The finished word stays in the summary and scratchpad.
+      setRunning(false);
+      setFps(0);
+      replayingRef.current = false;
+      setReplaying(false);
+    }
+  }
+
+  function newText() {
+    textSession.current = crypto.randomUUID();
+    finishRequested.current = false;
+    setResult(null);
+  }
 
   function stop() {
     session.current++;
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
-    if (video.current) video.current.srcObject = null;
+    if (video.current) {
+      video.current.pause();
+      video.current.srcObject = null;
+      if (video.current.getAttribute("src")) {
+        video.current.removeAttribute("src");
+        video.current.load();
+      }
+    }
     setRunning(false);
     setStarting(false);
     setResult(null);
     setFps(0);
+    replayingRef.current = false;
+    setReplaying(false);
   }
 
   useEffect(() => {
@@ -40,6 +165,7 @@ export default function CameraView() {
       return;
     }
     const current = ++session.current;
+    newText();
     setStarting(true);
     setError(null);
     try {
@@ -84,24 +210,29 @@ export default function CameraView() {
     // worker is still processing the previous one. With a single frame in
     // flight, a round trip slightly over one camera frame skips every other frame.
     const maxInFlight = 2;
-    let inFlight = 0;
     let callback = 0;
     let completedFrames = 0;
     let sampleStarted = 0;
 
     async function analyzeFrame() {
-      if (inFlight >= maxInFlight || !element.videoWidth) return;
-      inFlight++;
+      if (inFlight.current >= maxInFlight || !element.videoWidth) return;
+      inFlight.current++;
       try {
         const width = Math.min(640, element.videoWidth);
         canvas.width = width;
         canvas.height = Math.round(element.videoHeight * (width / element.videoWidth));
         context.drawImage(element, 0, 0, canvas.width, canvas.height);
+        const segmentId = textSession.current;
         const recognition = await window.desktop!.recognizeFrame(
           canvas.toDataURL("image/jpeg", 0.85),
-          model,
+          {
+            sessionId: segmentId,
+            timestampMs: performance.now(),
+            finish: finishRequested.current,
+            model,
+          },
         );
-        if (!canceled) {
+        if (!canceled && segmentId === textSession.current) {
           setResult(recognition);
           setError(null);
           const now = performance.now();
@@ -120,7 +251,7 @@ export default function CameraView() {
           element.cancelVideoFrameCallback(callback);
         }
       } finally {
-        inFlight--;
+        inFlight.current--;
       }
     }
 
@@ -158,16 +289,26 @@ export default function CameraView() {
                 ref={video}
                 muted
                 playsInline
-                className="camera-video"
+                crossOrigin="anonymous"
+                className={`camera-video${running && !replaying ? " mirrored" : ""}`}
                 aria-label="Live camera feed"
               />
-              {running && <LandmarkOverlay result={result} mirrored />}
+              {(running || replaying) && (
+                <LandmarkOverlay result={result} mirrored={running && !replaying} />
+              )}
             </div>
-            {!running && (
+            {!running && !replaying && (
               <div className="empty-state">
                 <CameraOff size={34} strokeWidth={1.4} />
                 <strong>The camera is off</strong>
                 <span>Start the camera to see your signs here.</span>
+              </div>
+            )}
+            {replaying && !running && (
+              <div className="empty-state">
+                <Clapperboard size={34} strokeWidth={1.4} />
+                <strong>Replaying a dataset clip</strong>
+                <span>Reconstructed landmark frames drive the same live pipeline.</span>
               </div>
             )}
           </div>
@@ -191,6 +332,7 @@ export default function CameraView() {
                     setResult(null);
                   }}
                 >
+                  <option value="neural">Neural</option>
                   <option value="knn">KNN</option>
                   <option value="cnn">CNN</option>
                 </select>
@@ -215,6 +357,24 @@ export default function CameraView() {
         </section>
         <aside className="result-column">
           <RecognitionSummary result={result} />
+          <FingerspellingSummary result={result} />
+          {running && result?.fingerspelling?.available && (
+            <div className="sequence-controls">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={result.fingerspelling.status === "finished"}
+                onClick={() => {
+                  finishRequested.current = true;
+                }}
+              >
+                Fullfør tekst
+              </button>
+              <button type="button" className="primary-button" onClick={newText}>
+                Ny sekvens
+              </button>
+            </div>
+          )}
           <div className="hint-card">
             <strong>For best results</strong>
             <p>Keep your whole hand in view. Use even lighting and a plain background.</p>
@@ -227,6 +387,39 @@ export default function CameraView() {
           )}
         </aside>
       </div>
+      {window.desktop && demoClips.length > 0 && (
+        <section className="replay-card" aria-label="Dataset replay">
+          <div className="replay-copy">
+            <span className="eyebrow">DATASET REPLAY</span>
+            <p>
+              No camera? Replay landmark frames from dataset clips through the same live and
+              final-text pipeline.
+            </p>
+          </div>
+          <select
+            aria-label="Replay clip"
+            value={demoIndex}
+            disabled={replaying}
+            onChange={(event) => setDemoIndex(Number(event.target.value))}
+          >
+            {demoClips.map((clip, position) => (
+              <option key={clip.index} value={position}>
+                clip {position + 1} · {(clip.durationMs / 1000).toFixed(1)} s · {clip.text}
+                {clip.video ? " · footage" : ""}
+              </option>
+            ))}
+          </select>
+          <button
+            className="primary-button"
+            type="button"
+            disabled={replaying}
+            onClick={() => void playClip()}
+          >
+            {replaying ? <LoaderCircle className="spin" size={17} /> : <Clapperboard size={17} />}
+            {replaying ? "Replaying…" : "Play clip"}
+          </button>
+        </section>
+      )}
       <Scratchpad result={result} />
     </div>
   );

@@ -27,7 +27,7 @@ class ModelTests(unittest.TestCase):
         classifier = worker.get_classifier(name)
         correct = 0
         for label, features in self.samples:
-            prediction = worker.predict_letter([{"score": 1.0, "features": features}], classifier)
+            prediction = worker.predict_letter([{"score": 1.0, "features": features}], classifier, name)
             correct += prediction is not None and prediction["letter"] == label
         self.assertGreaterEqual(correct / len(self.samples), minimum_accuracy)
 
@@ -42,7 +42,7 @@ class ModelTests(unittest.TestCase):
             worker.get_classifier("svm")
 
     def test_no_hands_means_no_letter(self):
-        self.assertIsNone(worker.predict_letter([], worker.get_classifier("knn")))
+        self.assertIsNone(worker.predict_letter([], worker.get_classifier("knn"), "knn"))
 
 
 if __name__ == "__main__":

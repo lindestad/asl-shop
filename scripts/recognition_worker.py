@@ -5,6 +5,7 @@ Stdout is reserved for protocol messages. MediaPipe diagnostics go to stderr.
 
 import base64
 import json
+import os
 from pathlib import Path
 import pickle
 import sys
@@ -14,11 +15,13 @@ import warnings
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(ROOT))
 MODEL_DIR = ROOT / "model" / "trained_models"
-DEFAULT_MODEL = "knn"
+DEFAULT_MODEL = "neural"
 classifiers = {}
 
 # The KNN was fitted on a DataFrame, but the worker's features use the same column order.
 warnings.filterwarnings("ignore", message="X does not have valid feature names")
+from model.live_neural import NeuralRuntime
+neural = NeuralRuntime(ROOT)
 
 video_detector = None
 video_timestamp = -1
@@ -89,7 +92,7 @@ def get_classifier(name=DEFAULT_MODEL):
     return classifiers[name]
 
 
-def predict_letter(hands, classifier):
+def predict_letter(hands, classifier, name):
     if not hands or classifier is None:
         return None
     import numpy as np
@@ -100,7 +103,7 @@ def predict_letter(hands, classifier):
     winner = int(np.argmax(probabilities))
     if probabilities[winner] < 0.6:
         return None
-    return {"letter": str(classes[winner]), "confidence": float(probabilities[winner])}
+    return {"letter": str(classes[winner]), "confidence": float(probabilities[winner]), "method": name}
 
 
 def track(frame):
@@ -128,7 +131,8 @@ def track(frame):
     return extractHands(frame, video_detector, video_timestamp)
 
 
-def analyze(data_url, video=False, model_name=DEFAULT_MODEL):
+def analyze(data_url, video=False, session_id=None, timestamp_ms=None, finish=False,
+            model_name=DEFAULT_MODEL):
     import cv2
     import numpy as np
     from handTracker.hand_features import detector, extractHands
@@ -146,13 +150,23 @@ def analyze(data_url, video=False, model_name=DEFAULT_MODEL):
         hands = track(frame)
     else:
         hands = extractHands(frame, detector)
-    classifier = get_classifier(model_name)
+    outputs = neural.analyze(hands, width, height, video=video, session_id=session_id,
+                             timestamp_ms=timestamp_ms, finish=finish)
+    # The picker owns the static letter head; the sequence model always runs.
+    # "neural" falls back to the KNN when the handshape checkpoint is missing.
+    classifier = None
+    model_used = "neural"
+    if model_name != "neural" or not outputs["handshapeAvailable"]:
+        requested = model_name if model_name in LOADERS else "knn"
+        classifier = get_classifier(requested)
+        outputs["prediction"] = predict_letter(hands, classifier, requested) if classifier else None
+        model_used = requested if classifier else model_name
     return {
         "width": width,
         "height": height,
-        "model": model_name,
-        "classifierAvailable": classifier is not None,
-        "prediction": predict_letter(hands, classifier),
+        "model": model_used,
+        "classifierAvailable": outputs["handshapeAvailable"] or classifier is not None,
+        **outputs,
         "hands": [
             {"hand": hand["hand"], "score": float(hand["score"]),
              "features": hand["features"].tolist(),
@@ -162,13 +176,49 @@ def analyze(data_url, video=False, model_name=DEFAULT_MODEL):
     }
 
 
+DEMO_CANVAS = 1000.0
+
+
+def analyze_landmarks(hands, session_id=None, timestamp_ms=None, finish=False):
+    """Demo replay path: landmark frames produced by scripts/demo_replay.py feed the
+    runtime directly, skipping image decode and MediaPipe; identical downstream pipeline."""
+    from types import SimpleNamespace
+
+    prepared = [
+        {"hand": hand["hand"], "score": 1.0,
+         "landmarks": [SimpleNamespace(x=float(p[0]), y=float(p[1]), z=0.0) for p in hand["points"]]}
+        for hand in hands
+    ]
+    outputs = neural.analyze(prepared, DEMO_CANVAS, DEMO_CANVAS, video=True, session_id=session_id,
+                             timestamp_ms=timestamp_ms, finish=finish)
+    return {
+        "width": DEMO_CANVAS,
+        "height": DEMO_CANVAS,
+        "model": "neural",
+        "classifierAvailable": outputs["handshapeAvailable"],
+        **outputs,
+        "hands": [
+            {"hand": hand["hand"], "score": hand["score"], "features": [],
+             "landmarks": [{"x": p.x, "y": p.y, "z": p.z} for p in hand["landmarks"]]}
+            for hand in prepared
+        ],
+    }
+
+
 def main():
     for line in sys.stdin:
         request = {}
         try:
             request = json.loads(line)
-            result = analyze(request["dataUrl"], request.get("video", False), request.get("model", DEFAULT_MODEL))
-            response = {"id": request["id"], "result": result}
+            if request.get("landmarks") is not None:
+                response = {"id": request["id"], "result": analyze_landmarks(
+                    request["landmarks"], request.get("sessionId"),
+                    request.get("timestampMs"), request.get("finish", False))}
+            else:
+                response = {"id": request["id"], "result": analyze(
+                    request["dataUrl"], request.get("video", False), request.get("sessionId"),
+                    request.get("timestampMs"), request.get("finish", False),
+                    request.get("model") or DEFAULT_MODEL)}
         except Exception as error:
             response = {"id": request.get("id"), "error": str(error)}
         print(json.dumps(response, allow_nan=False), flush=True)

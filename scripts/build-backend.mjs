@@ -7,16 +7,20 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const model = path.join(root, "data", "hand_landmarker.task");
 if (!existsSync(model))
   throw new Error("Run ./setup.sh to download the MediaPipe model before packaging.");
-const classifiers = ["knn_model.pkl", "cnn-landmarks.pkl"].map((name) =>
+const trainedModels = ["knn_model.pkl", "cnn-landmarks.pkl"].map((name) =>
   path.join(root, "model", "trained_models", name),
 );
-for (const classifier of classifiers)
+for (const classifier of trainedModels)
   if (!existsSync(classifier)) throw new Error(`Missing trained model: ${classifier}`);
+const neuralModels = ["handshape.pt", "sequence.pt"]
+  .map((name) => path.join(root, "data", name))
+  .filter(existsSync);
 const child = spawn(
   "uv",
   [
     "run",
     "--locked",
+    ...(neuralModels.length ? ["--extra", "neural"] : []),
     "--python",
     "3.12",
     "--with",
@@ -36,7 +40,9 @@ const child = spawn(
     root,
     "--add-data",
     `${model}:data`,
-    ...classifiers.flatMap((classifier) => ["--add-data", `${classifier}:model/trained_models`]),
+    ...trainedModels.flatMap((filename) => ["--add-data", `${filename}:model/trained_models`]),
+    ...neuralModels.flatMap((filename) => ["--add-data", `${filename}:data`]),
+    ...(neuralModels.length ? ["--collect-all", "torch", "--hidden-import", "model.neural"] : []),
     "--collect-all",
     "mediapipe",
     "--hidden-import",
