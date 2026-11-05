@@ -65,8 +65,8 @@ handle("images:open", async () => {
     dataUrl: `data:image/${mime};base64,${(await readFile(filename)).toString("base64")}`,
   };
 });
-handle("recognition:analyze", (dataUrl) => recognition.analyze(dataUrl));
-handle("recognition:frame", (dataUrl) => recognition.analyze(dataUrl, true));
+handle("recognition:analyze", (dataUrl, model) => recognition.analyze(dataUrl, false, model));
+handle("recognition:frame", (dataUrl, model) => recognition.analyze(dataUrl, true, model));
 
 async function createWindow() {
   window = new BrowserWindow({

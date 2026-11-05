@@ -18,12 +18,6 @@ df = pd.read_csv(data_path / "extractedLandmarks.csv", header=None, names=cols)
 X = df.drop(columns="label")
 y = df["label"]
 
-# Cross validation testing 
-k_range = range(1, 21)
-cv_scores = []
-
-# Evaluate each k using 5-fold cross-validation
-
 # Split into train and test
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 

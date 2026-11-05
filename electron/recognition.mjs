@@ -3,6 +3,8 @@ import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
+const MODELS = ["knn", "cnn"];
+
 export class RecognitionService {
   #child = null;
   #pending = new Map();
@@ -79,7 +81,8 @@ export class RecognitionService {
     });
   }
 
-  analyze(dataUrl, video = false) {
+  analyze(dataUrl, video = false, model = "knn") {
+    if (!MODELS.includes(model)) return Promise.reject(new Error("Unknown recognition model."));
     if (
       typeof dataUrl !== "string" ||
       dataUrl.length > 24 * 1024 * 1024 ||
@@ -96,7 +99,7 @@ export class RecognitionService {
         this.stop(new Error("Hand detection timed out. Try again with a smaller image."));
       }, 60000);
       this.#pending.set(id, { resolve, reject, timer });
-      this.#child.stdin.write(JSON.stringify({ id, dataUrl, video }) + "\n");
+      this.#child.stdin.write(JSON.stringify({ id, dataUrl, video, model }) + "\n");
     });
   }
 

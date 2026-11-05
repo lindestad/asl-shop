@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Copy, Delete, Space, Trash2 } from "lucide-react";
 import type { Recognition } from "./types";
 
-// A sign must stay recognized this long, with at least 4 of 5 neighbours agreeing, to be typed.
+// A sign must stay recognized this long, with at least this confidence, to be typed.
 const HOLD_MS = 1000;
 const MIN_CONFIDENCE = 0.8;
 

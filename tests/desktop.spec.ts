@@ -17,7 +17,7 @@ test.beforeEach(() => {
   test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration tests.");
   if (!process.env.ASL_SHOP_TEST_APP) {
     expect(
-      existsSync(path.resolve("data/knn.pkl")),
+      existsSync(path.resolve("model/trained_models/knn_model.pkl")),
       "Train the classifier with model/knn.py first.",
     ).toBe(true);
   }
