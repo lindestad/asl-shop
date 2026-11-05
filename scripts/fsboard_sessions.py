@@ -13,8 +13,8 @@ shape coordinates per hand and no z, so reconstruct_landmarks() inverts shape_fe
 path reads: scripts/eval_held_letters.py replaying these bundles derives the same 91-column features the
 pack stored, which tests/test_held_letter_eval.py checks against real packed rows.
 
-    uv run --extra neural python scripts/fsboard_sessions.py --limit 4
-    uv run --extra neural python scripts/eval_held_letters.py --session data/sign-sessions/fsboard-test-08db \\
+    uv run python scripts/fsboard_sessions.py --limit 4
+    uv run python scripts/eval_held_letters.py --session data/sign-sessions/fsboard-test-08db \\
         --report data/held-letter-fsboard.report.json
 """
 import argparse

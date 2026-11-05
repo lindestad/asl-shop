@@ -226,7 +226,7 @@ __marimo__/
 !/data/extracted_landmarks.csv
 *.task
 
-# Runtime models stay local; the shared landmark CSV is the exception above.
+# Runtime models stay local except for the bundled inference checkpoints.
 /extactedLandmarks.csv
 /model/*.pkl
 /model/*.npz
@@ -239,3 +239,7 @@ release/
 test-results/
 playwright-report/
 .build/
+
+# Live models needed before ens4 can refine a captured segment.
+!/data/handshape.pt
+!/data/sequence.pt

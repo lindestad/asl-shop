@@ -38,18 +38,12 @@ dependencies = [
     { name = "opencv-python" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pyyaml" },
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.9.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "torch", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "tqdm" },
-]
-
-[package.optional-dependencies]
-neural = [
-    { name = "pyyaml" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "torch", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 
 [package.metadata]
@@ -60,13 +54,11 @@ requires-dist = [
     { name = "opencv-contrib-python" },
     { name = "opencv-python", specifier = ">=5.0.0.93" },
     { name = "pandas" },
-    { name = "pyyaml", marker = "extra == 'neural'", specifier = ">=6.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "scikit-learn", specifier = ">=1.7.2" },
     { name = "torch", specifier = ">=2.14.1" },
-    { name = "torch", marker = "extra == 'neural'", specifier = ">=2.7" },
     { name = "tqdm" },
 ]
-provides-extras = ["neural"]
 
 [[package]]
 name = "certifi"

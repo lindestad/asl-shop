@@ -98,6 +98,9 @@ input:focus-visible {
   gap: clamp(12px, 1.8vh, 20px);
   height: 100%;
 }
+.view:has(.replay-card) {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
 .view-heading {
   display: flex;
   align-items: center;
@@ -312,11 +315,13 @@ h1 {
   flex-direction: column;
   gap: 14px;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
+}
+.result-column > * {
+  flex-shrink: 0;
 }
 .result-card {
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
   padding: 20px 22px;
 }
 .result-letter {
@@ -524,7 +529,6 @@ h1 {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-top: 18px;
   padding: 14px 20px;
   background: #fff;
   border: 1px solid #e5e9e9;
@@ -533,6 +537,7 @@ h1 {
 }
 .replay-card .replay-copy {
   flex: 1;
+  min-width: 0;
 }
 .replay-card p {
   margin: 5px 0 0;
@@ -541,6 +546,8 @@ h1 {
   line-height: 1.55;
 }
 .replay-card select {
+  flex: 2;
+  min-width: 0;
   padding: 8px 10px;
   border: 1px solid #d8dedd;
   border-radius: 8px;
@@ -548,4 +555,16 @@ h1 {
   color: #1f3134;
   font: inherit;
   font-size: 13px;
+}
+
+@media (max-width: 620px) {
+  .view:has(.replay-card) {
+    grid-template-rows: auto;
+  }
+  .replay-card {
+    flex-wrap: wrap;
+  }
+  .replay-card .replay-copy {
+    flex-basis: 100%;
+  }
 }

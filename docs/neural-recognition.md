@@ -1,11 +1,10 @@
 # Neural letters and fingerspelling
 
-This branch implements two independent supervised models and the app plumbing to
-use them. Checkpoints are local artifacts under `data/`, kept out of Git.
+The app uses two independent supervised live models and the ens4 Finish refiner.
+Their inference checkpoints ship under `data/`; training artifacts stay local.
 Synthetic tests exercise optimization, evaluation and checkpoint loading; they do
-not measure recognition quality. Until trained checkpoints are supplied, the app
-continues to use its existing KNN for static letters and explicitly reports that
-the text model is unavailable. Neither static classifier emits J/Z.
+not measure recognition quality. If live checkpoints are missing, the app falls back to its existing KNN for
+static letters and reports that the text model is unavailable. Neither static classifier emits J/Z.
 
 ## Models and input contract
 
@@ -51,14 +50,14 @@ weights are separate local dependencies, excluded from the packaged app.
 
 ## Environment
 
-From the worktree root, install the project and optional neural dependencies:
+From the worktree root, install the project dependencies, including PyTorch:
 
 ```powershell
-uv sync --extra neural --python 3.12
-uv run --extra neural python -c "import torch; print(torch.__version__, torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+uv sync --python 3.12
+uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
 ```
 
-On Windows, `.\setup.ps1 -Neural` additionally installs desktop dependencies and
+On Windows, `.\setup.ps1` additionally installs desktop dependencies and
 the MediaPipe hand detector. `-OpenFS` downloads/reuses ZIPs; `-ExtractOpenFS` also
 extracts them. Both accept `-OpenFSDir` pointing to your existing dataset directory.
 `-Plan` prints the planned commands without changing the environment. The native
@@ -98,10 +97,10 @@ Q cancels. Supply persistent pseudonymous signer IDs and distinct session IDs.
 Keep all sessions from a given signer in one split.
 
 ```powershell
-uv run --extra neural python scripts/collect_signs.py --signer-id person01 --session-id day01 --kind held --hand Right --transcript A --split train
-uv run --extra neural python scripts/collect_signs.py --signer-id person01 --session-id day01 --kind spelling --transcript "JAZZ" --split train
-uv run --extra neural python scripts/collect_signs.py --signer-id person01 --session-id day01 --kind idle --split train
-uv run --extra neural python scripts/collect_signs.py --signer-id person01 --session-id day01 --kind transition --split train
+uv run python scripts/collect_signs.py --signer-id person01 --session-id day01 --kind held --hand Right --transcript A --split train
+uv run python scripts/collect_signs.py --signer-id person01 --session-id day01 --kind spelling --transcript "JAZZ" --split train
+uv run python scripts/collect_signs.py --signer-id person01 --session-id day01 --kind idle --split train
+uv run python scripts/collect_signs.py --signer-id person01 --session-id day01 --kind transition --split train
 ```
 
 Held clips should contain only deliberate held letters. Record entering/leaving
@@ -183,7 +182,7 @@ uses embedded indices when present, with optional `right_frame_indices` and
 as nominal 30 FPS.
 
 ```powershell
-uv run --extra neural python scripts/import_openfs.py --input 'C:\Users\danie\dev\asl-shop\data\external\openfs\extracted\fingerspelling_fsboard_raw\TRAIN_FILE.npz' --metadata data/openfs-metadata.csv --output data/openfs-clips --trusted-pickle
+uv run python scripts/import_openfs.py --input 'C:\Users\danie\dev\asl-shop\data\external\openfs\extracted\fingerspelling_fsboard_raw\TRAIN_FILE.npz' --metadata data/openfs-metadata.csv --output data/openfs-clips --trusted-pickle
 ```
 
 Object NPZ files require trusted pickle loading; use verified official files.
@@ -264,9 +263,9 @@ Speed and landmark-noise augmentation preserve temporal order; CTC alignment
 capacity is checked, including the extra blanks required for repeated characters.
 
 ```powershell
-uv run --extra neural python scripts/train_neural.py --manifest data/sessions/manifest.jsonl --task handshape --output data/handshape.pt --epochs 30 --device cuda --amp
-uv run --extra neural python scripts/train_neural.py --manifest data/sessions/manifest.jsonl --task sequence --output data/sequence.pt --epochs 50 --device cuda --amp
-uv run --extra neural python scripts/train_neural.py --manifest data/sessions/manifest.jsonl --task sequence --output data/sequence.pt --evaluate data/sequence.pt --device cuda
+uv run python scripts/train_neural.py --manifest data/sessions/manifest.jsonl --task handshape --output data/handshape.pt --epochs 30 --device cuda --amp
+uv run python scripts/train_neural.py --manifest data/sessions/manifest.jsonl --task sequence --output data/sequence.pt --epochs 50 --device cuda --amp
+uv run python scripts/train_neural.py --manifest data/sessions/manifest.jsonl --task sequence --output data/sequence.pt --evaluate data/sequence.pt --device cuda
 ```
 
 The best validation checkpoint is saved. `--evaluate` reads the test split and
@@ -344,7 +343,7 @@ archive = Path("data/openfs-recognizer-fsboard.zip")
 if not archive_ready(archive):
     gdown.download(id="1ucc7mcoagNygnwhT9PJNxbfev7GY10qe", output=str(archive), resume=True)
 extract_archive(archive, Path("data/openfs-checkpoints"))
-'@ | uv run --extra neural --with gdown python -
+'@ | uv run --with gdown python -
 ```
 
 The checkpoint ZIP is approximately 33 MB. This workstation already has these
@@ -384,12 +383,12 @@ preserves the correct current A prediction. Offline FSboard accuracy does not
 establish rejection of idle hands or unrelated activity. App motion/context gates
 change outputs and are evaluated separately from the raw offline benchmark.
 
-Packaging includes neural checkpoints when present and installs the neural extra.
+Packaging includes the bundled live checkpoints, ens4 weights and PyTorch.
 Packaging a CUDA runtime can make the bundle substantially larger; CPU-only
 distribution and actual packaged neural inference still need verification.
 
 ```powershell
-uv run --extra neural python -m unittest discover -s tests -p 'test_neural.py'
+uv run python -m unittest discover -s tests -p 'test_neural.py'
 node --test tests/recognition-service.test.mjs
 npm run build
 ```

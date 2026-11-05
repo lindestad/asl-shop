@@ -1,10 +1,24 @@
 # ASL Shop
 
-An optional [neural letter and temporal fingerspelling pipeline](docs/neural-recognition.md)
-adds separate current-letter and spelled-text outputs, explicit collection,
-signer-disjoint training/evaluation, and OpenFS import support. Trained checkpoints
-are local data artifacts; the existing KNN remains a static-letter fallback when
-the neural head is unavailable. Optional external OpenFS refinement runs on Finish.
+The [neural letter and temporal fingerspelling pipeline](docs/neural-recognition.md)
+provides current-letter and spelled-text outputs. `uv sync` installs PyTorch and
+all runtime dependencies. The live handshape/sequence checkpoints and four-member
+ens4 ensemble ship in this repo; Finish uses ens4 automatically, with no model-path
+export or external OpenFS checkout. Set `ASL_ENSEMBLE_MODEL_DIR` to use other weights.
+The existing KNN remains a static-letter fallback.
+
+Download the ten example videos from [FSboard on Kaggle](https://www.kaggle.com/datasets/googleai/fsboard):
+
+```sh
+uv run python scripts/download_demo_videos.py
+```
+
+The script reuses existing videos in `data/external/openfs/demo-clips` and prints
+Kaggle API key setup instructions if credentials are missing. Videos stay local
+and untracked. Use `--directory PATH` (and `ASL_DEMO_VIDEO_DIR` when launching the app)
+for another location. Demo replay also requires the packed OpenFS test landmarks
+in `data/openfs-packed`; see the [data preparation guide](docs/neural-recognition.md).
+The bundled OpenFS-trained weights retain their research-only, non-commercial terms.
 
 The [measured FSboard results and reproduction commands](docs/training-results-2026-10-12.md)
 compare the legacy-data KNN, trained handshape/causal models and released OpenFS
@@ -20,7 +34,7 @@ uv run --with gdown python scripts/download_openfs.py --directory 'C:\Users\dani
 The two archives are `fingerspelling_fsboard_raw.zip` (re-extracted landmarks,
 not video) and `fingerspelling_fsboard_proc_clean.zip` (model-derived cleaned frame
 annotations). Existing ZIPs are reused and retained. Add `--verify` for a full CRC
-scan. On macOS/Linux, `./setup.sh --neural` installs neural dependencies;
+scan. On macOS/Linux, `./setup.sh` installs all runtime dependencies;
 `./setup.sh --extract-openfs --openfs-dir /path/to/openfs` also prepares the data.
 The optional OpenFS download is approximately 12.7 GB compressed. Dataset and
 upstream code terms remain those of [OpenFS](https://github.com/AIRC-KETI/OpenFS).
@@ -28,11 +42,11 @@ upstream code terms remain those of [OpenFS](https://github.com/AIRC-KETI/OpenFS
 Native Windows setup is available with uv and Node.js 22.12+ installed:
 
 ```powershell
-.\setup.ps1 -Neural
+.\setup.ps1
 .\setup.ps1 -ExtractOpenFS -OpenFSDir 'C:\Users\danie\dev\asl-shop\data\external\openfs'
 ```
 
-The default `setup.ps1` skips OpenFS and neural dependencies. `-OpenFS` resumes or
+The default `setup.ps1` installs neural dependencies and skips the OpenFS dataset. `-OpenFS` resumes or
 reuses the archives without extraction; `-ExtractOpenFS` also extracts them.
 Add `-Plan` to inspect commands without modifying anything. Launch trained
 checkpoints with `scripts/start-neural.ps1`; see
@@ -67,13 +81,8 @@ grensesnittet i nettleser, uten lokal gjenkjenning.
 
 `setup.sh` installerer prosjektets Node- og Python-avhengigheter og MediaPipe-modellen.
 Det ferdige landemerkeuttrekket følger med som `data/extracted_landmarks.csv`, slik at
-hver maskin slipper den tidkrevende bildeanalysen. Originalbilder og trente modeller
-ligger lokalt i den Git-ignorerte `data/`-mappen. Ved første oppsett trenger du bare
-å trene bokstavmodellen før lokal bokstavgjenkjenning og pakking:
-
-```sh
-uv run python model/knn.py
-```
+hver maskin slipper den tidkrevende bildeanalysen. Originalbilder og treningsdata ligger lokalt i den Git-ignorerte `data/`-mappen.
+Modellene for gjenkjenning følger med i repoet, så appen kan startes etter oppsett.
 
 Last bare ned originalbildene hvis du vil kjøre desktop-testene eller generere et
 nytt landemerkeuttrekk fra ASL Alphabet-datasettet:
@@ -107,7 +116,7 @@ Begge skriptene har `--input` og `--output` for andre lokale filbaner. Standardb
 er relative til repo-roten, uavhengig av terminalens arbeidsmappe.
 
 For å kjøre appen trengs `data/hand_landmarker.task` og modellene i
-`model/trained_models/`. CNN-modellen krever også PyTorch. Uten bokstavmodellen vises håndlandemerker, men ingen bokstav. Pakkede apper
+`model/trained_models/`. PyTorch installeres som en vanlig prosjektavhengighet. Uten bokstavmodellen vises håndlandemerker, men ingen bokstav. Pakkede apper
 inkluderer modellene og krever verken treningsdatasettet eller en Python-installasjon.
 Last bare pickle-modeller som du selv har trent eller stoler på.
 

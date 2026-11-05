@@ -6,8 +6,8 @@ Scores from these sessions show the scorer and the replay path work; they say no
 app reads a person, and the session's consent record says synthetic so the scorer refuses to call any
 number from it a human label.
 
-    uv run --extra neural python scripts/make_synthetic_session.py --out data/sign-sessions/fixture-easy
-    uv run --extra neural python scripts/make_synthetic_session.py --plan hard --out data/sign-sessions/fixture-hard
+    uv run python scripts/make_synthetic_session.py --out data/sign-sessions/fixture-easy
+    uv run python scripts/make_synthetic_session.py --plan hard --out data/sign-sessions/fixture-hard
 """
 import argparse
 from pathlib import Path

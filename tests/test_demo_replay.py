@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 PACKED = Path(os.environ.get("ASL_PACKED_DIR", ROOT / "data" / "openfs-packed"))
-ENSEMBLE = ROOT / "data" / "models" / "ensemble-2026-10-25"
+ENSEMBLE = ROOT / "data" / "models" / "ensemble-2026-10-25-bf16"
 
 
 class ReplayTests(unittest.TestCase):
@@ -46,13 +46,6 @@ class ReplayTests(unittest.TestCase):
     def test_worker_landmark_path_finishes_with_corrected_text(self):
         if not any(ENSEMBLE.glob("*.pt")):
             raise unittest.SkipTest("Ensemble checkpoints are required for the corrected-text test")
-        previous = os.environ.get("ASL_ENSEMBLE_MODEL_DIR")
-        os.environ["ASL_ENSEMBLE_MODEL_DIR"] = str(ENSEMBLE)
-        self.addCleanup(
-            lambda: os.environ.pop("ASL_ENSEMBLE_MODEL_DIR", None)
-            if previous is None
-            else os.environ.__setitem__("ASL_ENSEMBLE_MODEL_DIR", previous)
-        )
         from scripts.demo_replay import clip_frames
         import scripts.recognition_worker as worker
 

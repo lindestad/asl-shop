@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Set up ASL Shop on Windows, with optional neural dependencies and OpenFS data.
+Set up ASL Shop on Windows, with neural dependencies and optional OpenFS data.
 .EXAMPLE
 .\setup.ps1 -Neural
 .EXAMPLE
@@ -19,7 +19,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoDirectory = $PSScriptRoot
 if ($Help) {
-    Write-Output 'Usage: .\setup.ps1 [-Neural] [-OpenFS] [-ExtractOpenFS] [-OpenFSDir PATH]'
+    Write-Output 'Usage: .\setup.ps1 [-OpenFS] [-ExtractOpenFS] [-OpenFSDir PATH]'
     Write-Output 'Requires uv and Node.js 22.12+ with npm. OpenFS is optional and approximately 12.7 GB compressed.'
     Write-Output 'Existing ZIPs are reused, interrupted downloads resume, and extraction preserves ZIPs.'
     return
@@ -30,10 +30,9 @@ if (-not $OpenFSDir) {
     $OpenFSDir = Join-Path $repoDirectory $OpenFSDir
 }
 $OpenFSDir = [System.IO.Path]::GetFullPath($OpenFSDir)
-$installNeural = $Neural -or $OpenFS -or $ExtractOpenFS
+$installNeural = $true
 $prepareOpenFS = $OpenFS -or $ExtractOpenFS
 $syncArguments = @('sync', '--locked', '--python', '3.12')
-if ($installNeural) { $syncArguments += @('--extra', 'neural') }
 $dataArguments = @('run', '--locked', '--with', 'gdown', 'python',
     'scripts/download_openfs.py', '--directory', $OpenFSDir)
 if ($ExtractOpenFS) { $dataArguments += '--extract' }

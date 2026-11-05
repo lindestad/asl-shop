@@ -5,7 +5,7 @@ Exit 0 means the annotation is internally consistent and the recording carries a
 number means. Exit 2 means the session itself could not be read. A draft annotation (model
 suggestions nobody confirmed) is reported as unusable unless --draft says it is only a draft.
 
-    uv run --extra neural python scripts/validate_sign_session.py data/sign-sessions/person01-day01
+    uv run python scripts/validate_sign_session.py data/sign-sessions/person01-day01
 """
 import argparse
 from pathlib import Path

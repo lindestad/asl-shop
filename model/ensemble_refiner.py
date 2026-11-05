@@ -11,6 +11,7 @@ language correction (argmax-score MAP output only).
 """
 import math
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -29,12 +30,16 @@ def timeline_tokens(values):
     return values.astype(np.float32), segments, positions
 
 
-class EnsembleRefiner:
-    """Env-gated exactly like OpenFSRefiner: set ASL_ENSEMBLE_MODEL_DIR to a directory
-    containing the ensemble .pt checkpoints; they load lazily on the first refinement."""
+DEFAULT_MODEL_DIR = Path("data/models/ensemble-2026-10-25-bf16")
 
-    def __init__(self, model_directory=None):
-        self.directory = model_directory or os.environ.get("ASL_ENSEMBLE_MODEL_DIR")
+
+class EnsembleRefiner:
+    """Bundled ens4 checkpoints, loaded lazily on the first refinement."""
+
+    def __init__(self, model_directory=None, *, root=None):
+        root = Path(root or getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+        self.directory = (model_directory or os.environ.get("ASL_ENSEMBLE_MODEL_DIR")
+                          or root / DEFAULT_MODEL_DIR)
         self.enabled = bool(self.directory)
         self.models = None
         self.dtype = None
