@@ -12,7 +12,10 @@ model_path = Path(os.environ.get('ASL_MEDIAPIPE_MODEL', Path(__file__).resolve()
 
 def create_detector(num_hands=8, running_mode=vision.RunningMode.IMAGE):
     return vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-        base_options=python.BaseOptions(model_asset_path=str(model_path)),
+        base_options=python.BaseOptions(
+            model_asset_path=str(model_path),
+            delegate=python.BaseOptions.Delegate.GPU,
+        ),
         num_hands=num_hands,
         running_mode=running_mode,
     ))
@@ -21,8 +24,9 @@ def create_detector(num_hands=8, running_mode=vision.RunningMode.IMAGE):
 detector = create_detector()
 
 def frameToMpImage(frame):
-    rgbFrame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    return mp.Image(image_format=mp.ImageFormat.SRGB, data=rgbFrame)
+    # The Metal GPU path requires four-channel input for its pixel buffers.
+    rgbaFrame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+    return mp.Image(image_format=mp.ImageFormat.SRGBA, data=rgbaFrame)
 
 def landmarks_to_features(hand, handedness_label, width, height):
     pts = np.array([[lm.x * width, lm.y * height, lm.z * width] for lm in hand])
