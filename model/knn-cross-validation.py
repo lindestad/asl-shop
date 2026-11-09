@@ -26,15 +26,15 @@ cv_scores = []
 # Evaluate each k using 5-fold cross-validation
 for k in tqdm(k_range, desc="Evaluating k"):
     knn = KNeighborsClassifier(n_neighbors=k)
-    scores = cross_val_score(knn, X, y, cv=5, scoring='f1_macro')
+    scores = cross_val_score(knn, X, y, cv=5, scoring='d2_log_loss_score')
     cv_scores.append(scores.mean())
 
 # Plot accuracy vs. k
 plt.figure(figsize=(8, 5))
 plt.plot(k_range, cv_scores, marker='o')
-plt.title("k-NN Cross-Validation Accuracy vs k")
+plt.title("k-NN Cross-Validation loss vs k")
 plt.xlabel("Number of Neighbors: k")
-plt.ylabel("Cross-Validated Accuracy")
+plt.ylabel("Cross-Validated cross entropy")
 plt.grid(True)
 plt.show()
 

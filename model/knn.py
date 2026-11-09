@@ -5,70 +5,47 @@ x0,y0,z0,... order. A header row is optional: files from the extraction
 explorations are headerless and assumed to be in that canonical order.
 """
 
-import argparse
 from pathlib import Path
 import pickle
 
-import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 
 ROOT = Path(__file__).resolve().parents[1]
+INPUT_PATH = ROOT / "data" / "extractedLandmarks.csv"
+OUTPUT_PATH = ROOT / "model" / "trained_models" / "knn_model.pkl"
 FEATURE_COLUMNS = [f"{axis}{i}" for i in range(21) for axis in "xyz"]
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--input", type=Path, default=ROOT / "data" / "extracted_landmarks.csv"
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=ROOT / "model" / "trained_models" / "knn_model.pkl",
-    )
-    args = parser.parse_args()
-    if not args.input.is_file():
-        parser.error(
-            f"Missing landmarks: {args.input}. Run uv run python load_data.py first."
-        )
-
-    with args.input.open() as file:
+    with INPUT_PATH.open() as file:
         has_header = file.readline().lower().startswith("label")
-    # Headerless files skip the column-order guard: there is no header to verify.
     df = (
-        pd.read_csv(args.input)
+        pd.read_csv(INPUT_PATH)
         if has_header
-        else pd.read_csv(args.input, header=None, names=["label", *FEATURE_COLUMNS])
+        else pd.read_csv(INPUT_PATH, header=None, names=["label", *FEATURE_COLUMNS])
     )
-    if list(df.columns) != ["label", *FEATURE_COLUMNS]:
-        parser.error(
-            "Expected a label column followed by 63 coordinates in x0,y0,z0,... order."
-        )
-    features = df[FEATURE_COLUMNS].to_numpy(dtype=np.float64)
-    if df["label"].isna().any() or not np.isfinite(features).all():
-        parser.error(
-            "Labels and coordinates must not contain missing or non-finite values."
-        )
-    if len(df) < 8:
-        parser.error(
-            "At least eight landmark rows are required for training and evaluation."
-        )
+    features, labels = df[FEATURE_COLUMNS].to_numpy(), df["label"].astype(str)
 
-    x_train, x_test, y_train, y_test = train_test_split(
-        features, df["label"].astype(str), test_size=0.3, random_state=42
+    # 60% train, 20% validation, 20% test.
+    x_train, x_rest, y_train, y_rest = train_test_split(
+        features, labels, test_size=0.4, random_state=42
     )
-    classifier = KNeighborsClassifier(n_neighbors=5)
-    classifier.fit(x_train, y_train)
-    prediction = classifier.predict(x_test)
-    print(f"Training rows: {len(x_train)}; held-out rows: {len(x_test)}")
-    print(f"Held-out accuracy (k=5): {accuracy_score(y_test, prediction):.2%}")
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open("wb") as output:
+    x_val, x_test, y_val, y_test = train_test_split(
+        x_rest, y_rest, test_size=0.5, random_state=42
+    )
+
+    classifier = KNeighborsClassifier(n_neighbors=1).fit(x_train, y_train)
+    print(f"Train: {len(x_train)}; validation: {len(x_val)}; test: {len(x_test)}")
+    print(f"Validation accuracy: {accuracy_score(y_val, classifier.predict(x_val)):.2%}")
+    print(f"Test accuracy: {accuracy_score(y_test, classifier.predict(x_test)):.2%}")
+
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with OUTPUT_PATH.open("wb") as output:
         pickle.dump(classifier, output)
-    print(f"Saved classifier to {args.output}")
+    print(f"Saved classifier to {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

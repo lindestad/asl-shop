@@ -9,14 +9,14 @@ from sklearn.preprocessing import LabelEncoder
 import pickle
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
 BATCH_SIZE = 64
 EPOCHS = 5
 LR = 0.001
 WEIGHT_DECAY = 1e-4
 
-project_root = Path(__file__).resolve().parents[3]
+project_root = Path(__file__).resolve().parents[1]
 data_path = project_root / 'data'
 
 # Load extracted landmarks
@@ -60,7 +60,7 @@ class CNN(nn.Module):
         self.conv1 = nn.Conv1d(3, 32, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(32, 64, kernel_size=3, padding=1)
         self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
-        # 21 landmarks -> 10 -> 5 after the two pooling layers
+        # 21 landmarks -> 10
         self.fc1 = nn.Linear(64 * 5, 512)
         self.fc2 = nn.Linear(512, num_classes)
 
