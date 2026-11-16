@@ -1,20 +1,14 @@
 from sklearn.model_selection import cross_val_score
 from sklearn.neighbors import KNeighborsClassifier
-import pandas as pd
 from pathlib import Path
 import numpy as np 
 import matplotlib.pyplot as plt
 from tqdm import tqdm 
 
 
-project_root = Path(__file__).resolve().parents[1]
-data_path = project_root / 'data'
-models = Path(__file__).resolve().parent
-model_path = models / 'trained_models'
+from landmarks import load_landmarks
 
-# Load extracted landmarks
-cols = ["label"] + [f"{axis}{i}" for i in range(21) for axis in "xyz"]
-df = pd.read_csv(data_path / "extractedLandmarks.csv", header=None, names=cols) 
+df = load_landmarks()
 
 X = df.drop(columns="label")
 y = df["label"]
@@ -30,9 +24,9 @@ for k in tqdm(k_range, desc="Evaluating k"):
     mean_cv_score = scores.mean()
     cv_scores.append(mean_cv_score)
     if k == 1:
-        print(f"k=1 loss: {mean_cv_score}")
+        print(f"k=1 accuracy: {mean_cv_score}")
     if k == 28:
-            print(f"k=28 loss: {mean_cv_score}")
+        print(f"k=28 accuracy: {mean_cv_score}")
 
 # Plot accuracy vs. k
 plt.figure(figsize=(8, 5))

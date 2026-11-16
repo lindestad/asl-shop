@@ -59,8 +59,8 @@ lokalt av en Python-prosess med MediaPipe Hand Landmarker.
 **Bokstavmodeller:** En nedtrekksmeny i kameravisningen velger mellom en KNN- og en
 CNN-modell, begge trent på landemerker fra ASL Alphabet-datasettet. De bruker de samme
 63 normaliserte håndkoordinatene som kamera- og bildeanalysen. Modellene ligger i
-`model/trained_models/` og inkluderes ved pakking. KNN-modellen bruker k=1 og viser
-nærmeste treningseksempel; CNN-modellen viser softmax-sannsynligheten, som ikke er
+`model/trained_models/` og inkluderes ved pakking. KNN-modellen bruker k=28 og viser
+andelen av de nærmeste treningseksemplene som stemmer for bokstaven; CNN-modellen viser softmax-sannsynligheten, som ikke er
 kalibrert. Ved under 60 % vises ingen bokstav.
 J og Z er bevegelsestegn i ASL, så en modell som bare ser ett bilde om gangen kan
 ikke gjenkjenne hele bevegelsen.
@@ -80,25 +80,28 @@ npm run dev
 grensesnittet i nettleser, uten lokal gjenkjenning.
 
 `setup.sh` installerer prosjektets Node- og Python-avhengigheter og MediaPipe-modellen.
-Det ferdige landemerkeuttrekket følger med som `data/extracted_landmarks.csv`, slik at
-hver maskin slipper den tidkrevende bildeanalysen. Originalbilder og treningsdata ligger lokalt i den Git-ignorerte `data/`-mappen.
+Originalbilder, landemerkeuttrekket (`data/extractedLandmarks.csv`) og andre treningsdata
+ligger lokalt i den Git-ignorerte `data/`-mappen og følger ikke med i repoet.
 Modellene for gjenkjenning følger med i repoet, så appen kan startes etter oppsett.
 
-Last bare ned originalbildene hvis du vil kjøre desktop-testene eller generere et
-nytt landemerkeuttrekk fra ASL Alphabet-datasettet:
+Last bare ned originalbildene hvis du vil trene bokstavmodellene på nytt. De er trent
+på ASL Alphabet-datasettet fra Mendeley (24 statiske bokstaver, uten J og Z), som
+`setup/data.sh` laster ned til `data/Train` og `data/Test`:
 
 ```sh
-uv run python scripts/download_dataset.py
+sh setup/data.sh
 uv run python load_data.py
 uv run python model/knn.py
 ```
 
-`load_data.py` erstatter det delte CSV-uttrekket. Bruk `--output data/my_landmarks.csv`
-og `model/knn.py --input data/my_landmarks.csv` for et forsøk som ikke endrer den
-versjonerte filen.
+`load_data.py` erstatter det lokale CSV-uttrekket. Bruk `--output data/my_landmarks.csv`
+og `model/knn.py --input data/my_landmarks.csv --output data/my_knn.pkl` for et forsøk
+som ikke endrer uttrekket eller den versjonerte modellen. `model/svm.py`,
+`model/cnn-landmarks.py` og `model/knn-cross-validation.py` leser det samme uttrekket
+gjennom `model/landmarks.py`, som godtar CSV-filer med og uten overskriftsrad.
 
 `load_data.py` bruker samme normalisering som appen og skriver 63 koordinater per hånd
-til `data/extracted_landmarks.csv`. Uten valg behandles alle treningsbildene. For en
+til `data/extractedLandmarks.csv`. Uten valg behandles alle treningsbildene. For en
 raskere prøve, bruk `uv run python load_data.py --samples-per-class 120 --seed 42`.
 Uttrekket bruker opptil fire CPU-prosesser som standard. `--workers 2` bruker færre
 ressurser på en laptop; `--workers 1` kjører sekvensielt. Hver prosess gjenbruker sin
@@ -107,11 +110,11 @@ Fremdriften viser bilder per sekund og anslått tid igjen. Et eksisterende CSV-u
 erstattes først når hele jobben er ferdig, slik at avbrudd ikke ødelegger det.
 Antallet rader kan avvike fra antallet bilder, fordi noen bilder ikke gir hånddeteksjon.
 
-`model/knn.py` bruker et fast 70/30-utvalg med seed 42, skriver antall trenings- og
-evalueringsrader og måler nøyaktighet på de holdte radene før `data/knn.pkl` lagres.
-Det medfølgende CSV-uttrekket har 63 932 rader, hvorav 44 752 blir brukt
-til trening. Nye uttrekk kan gi andre antall. Evalueringen bruker samme bildedatasett
-som treningen og måler ikke generalisering til nye personer, bakgrunner og lysforhold.
+`model/knn.py` bruker et fast 60/20/20-utvalg (trening/validering/test) med seed 42 og
+k=28 (`--neighbors`), skriver antall rader i hvert utvalg og måler nøyaktighet på
+validerings- og testradene før `model/trained_models/knn_model.pkl` lagres.
+Evalueringen bruker samme bildedatasett som treningen og måler ikke generalisering til
+nye personer, bakgrunner og lysforhold.
 Begge skriptene har `--input` og `--output` for andre lokale filbaner. Standardbanene
 er relative til repo-roten, uavhengig av terminalens arbeidsmappe.
 
@@ -158,6 +161,6 @@ Electron-prosjektet. Selve Electron-integrasjonen følger
 for preload, context isolation, sandboxing, IPC-validering, tillatelser og lokal protokoll.
 
 Desktop-integrasjonstesten bruker
-`data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg` fra det separate datasettet.
-Last ned datasettet og tren modellen før du kjører desktop-testene. De sjekker også
+`data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg` fra Kaggle-versjonen av ASL Alphabet, som bare brukes som testbilde.
+Last den ned med `uv run python scripts/download_dataset.py` før du kjører desktop-testene. De sjekker også
 kamerahastighet, nye hender, stopp, omstart og bytte av visning.

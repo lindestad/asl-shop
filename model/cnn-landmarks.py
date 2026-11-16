@@ -1,5 +1,4 @@
 from pathlib import Path
-import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,12 +15,9 @@ EPOCHS = 5
 LR = 0.001
 WEIGHT_DECAY = 1e-4
 
-project_root = Path(__file__).resolve().parents[1]
-data_path = project_root / 'data'
+from landmarks import load_landmarks
 
-# Load extracted landmarks
-cols = ["label"] + [f"{axis}{i}" for i in range(21) for axis in "xyz"]
-df = pd.read_csv(data_path / "extractedLandmarks.csv", header=None, names=cols)
+df = load_landmarks()
 
 X = df.drop(columns="label").to_numpy(dtype="float32")
 

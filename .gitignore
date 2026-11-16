@@ -223,7 +223,6 @@ __marimo__/
 # Lokale data og modellfiler (les README)
 /data/*
 !/data/.gitkeep
-!/data/extracted_landmarks.csv
 *.task
 
 # Runtime models stay local except for the bundled inference checkpoints.

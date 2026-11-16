@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import sys
 
 import cv2
 import numpy as np
@@ -10,15 +11,25 @@ from mediapipe.tasks.python.components.containers import landmark
 
 model_path = Path(os.environ.get('ASL_MEDIAPIPE_MODEL', Path(__file__).resolve().parents[1] / 'data' / 'hand_landmarker.task'))
 
+# GPU first; ASL_MEDIAPIPE_DELEGATE=cpu skips it. Once GPU setup has failed, stay on CPU.
+delegates = ([] if os.environ.get('ASL_MEDIAPIPE_DELEGATE', '').lower() == 'cpu'
+             else [python.BaseOptions.Delegate.GPU]) + [python.BaseOptions.Delegate.CPU]
+
+
 def create_detector(num_hands=8, running_mode=vision.RunningMode.IMAGE):
-    return vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-        base_options=python.BaseOptions(
-            model_asset_path=str(model_path),
-            delegate=python.BaseOptions.Delegate.GPU,
-        ),
-        num_hands=num_hands,
-        running_mode=running_mode,
-    ))
+    while True:
+        try:
+            return vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
+                base_options=python.BaseOptions(model_asset_path=str(model_path), delegate=delegates[0]),
+                num_hands=num_hands,
+                running_mode=running_mode,
+            ))
+        except Exception as error:
+            if len(delegates) == 1:
+                raise
+            # stderr: the recognition worker reserves stdout for its protocol.
+            print(f"MediaPipe GPU delegate unavailable, using CPU: {error}", file=sys.stderr, flush=True)
+            delegates.pop(0)
 
 
 detector = create_detector()
