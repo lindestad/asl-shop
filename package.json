@@ -63,8 +63,7 @@
       "target": [
         "AppImage"
       ],
-      "category": "Education",
-      "syncDesktopName": true
+      "category": "Education"
     },
     "mac": {
       "target": [
