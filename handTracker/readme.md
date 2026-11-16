@@ -11,9 +11,9 @@ https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/
 
 Modellbanen beregnes fra kildefilen og er uavhengig av arbeidsmappen.
 
-Alle detektorer bruker MediaPipes GPU-delegat, både for bilder og videosporing.
-Dette krever en MediaPipe-installasjon med GPU-støtte og tilgang til en grafikkontekst.
-Hvis GPU-en ikke kan initialiseres, rapporteres en feil i stedet for å bytte til CPU.
+Alle detektorer prøver først MediaPipes GPU-delegat, både for bilder og videosporing.
+Hvis GPU-en ikke kan initialiseres, skrives en melding til stderr og detektorene bruker
+CPU resten av prosessen. Sett `ASL_MEDIAPIPE_DELEGATE=cpu` for å hoppe over GPU-forsøket.
 
 ## Bruk
 

@@ -100,7 +100,7 @@ detects hands with MediaPipe Hand Landmarker:
   must also strictly increase, which the runtime enforces.
 
 The static letter answer prefers the neural handshape model. Only when that
-model is unavailable does the legacy KNN step in (`data/knn.pkl`, 63-value XYZ
+model is unavailable does the legacy KNN step in (`model/trained_models/knn_model.pkl`, 63-value XYZ
 features, needs a ≥60 % neighbor majority, never answers J/Z). Hand *detection*
 is MediaPipe's job; the classifiers only ever see landmarks.
 

@@ -6,17 +6,17 @@ import sys
 import time
 
 import numpy as np
-import pandas as pd
 from sklearn.neighbors import KNeighborsClassifier
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from model.landmarks import CSV_PATH, FEATURE_COLUMNS, load_landmarks
 from model.neural import CONTRACT, HANDSHAPES
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--csv', type=Path, default=ROOT / 'data/extracted_landmarks.csv')
+    parser.add_argument('--csv', type=Path, default=CSV_PATH)
     parser.add_argument('--packed', type=Path, required=True)
     parser.add_argument('--report', type=Path, required=True)
     args = parser.parse_args()
@@ -24,10 +24,8 @@ def main():
     packed = (args.packed / schema.get('generation', '')).resolve()
     if schema['contract'] != CONTRACT or not packed.is_relative_to(args.packed.resolve()):
         raise ValueError('Incompatible packed data contract or generation path.')
-    frame = pd.read_csv(args.csv)
-    columns = [f'{axis}{index}' for index in range(21) for axis in 'xyz']
-    if list(frame.columns) != ['label', *columns]:
-        raise ValueError('Expected the legacy label + 63-coordinate CSV.')
+    frame = load_landmarks(args.csv)
+    columns = FEATURE_COLUMNS
     frame = frame[frame.label.isin(HANDSHAPES[1:])]
     xy = frame[columns].to_numpy().reshape(-1, 21, 3)[..., :2].copy()
     # Original CSV is already wrist-relative and mirrored. Replace XYZ scaling

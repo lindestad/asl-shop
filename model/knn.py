@@ -1,33 +1,28 @@
-"""Train the runtime classifier from locally extracted hand landmarks.
+"""Train the runtime KNN classifier from locally extracted hand landmarks."""
 
-Reads a landmarks CSV with a label column followed by 63 coordinates in
-x0,y0,z0,... order. A header row is optional: files from the extraction
-explorations are headerless and assumed to be in that canonical order.
-"""
-
+import argparse
 from pathlib import Path
 import pickle
 
-import pandas as pd
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 
-ROOT = Path(__file__).resolve().parents[1]
-INPUT_PATH = ROOT / "data" / "extractedLandmarks.csv"
+from landmarks import CSV_PATH, FEATURE_COLUMNS, ROOT, load_landmarks
+
 OUTPUT_PATH = ROOT / "model" / "trained_models" / "knn_model.pkl"
-FEATURE_COLUMNS = [f"{axis}{i}" for i in range(21) for axis in "xyz"]
 
 
 def main():
-    with INPUT_PATH.open() as file:
-        has_header = file.readline().lower().startswith("label")
-    df = (
-        pd.read_csv(INPUT_PATH)
-        if has_header
-        else pd.read_csv(INPUT_PATH, header=None, names=["label", *FEATURE_COLUMNS])
-    )
-    features, labels = df[FEATURE_COLUMNS].to_numpy(), df["label"].astype(str)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input", type=Path, default=CSV_PATH)
+    parser.add_argument("--output", type=Path, default=OUTPUT_PATH)
+    # k=28 chosen from cross-validated log loss (see knn-cross-validation.py).
+    parser.add_argument("--neighbors", type=int, default=28)
+    args = parser.parse_args()
+
+    df = load_landmarks(args.input)
+    features, labels = df[FEATURE_COLUMNS].to_numpy(), df["label"]
 
     # 60% train, 20% validation, 20% test.
     x_train, x_rest, y_train, y_rest = train_test_split(
@@ -37,16 +32,15 @@ def main():
         x_rest, y_rest, test_size=0.5, random_state=42
     )
 
-    # k=28 chosen from cross-validated log loss (see knn-cross-validation.py).
-    classifier = KNeighborsClassifier(n_neighbors=28).fit(x_train, y_train)
+    classifier = KNeighborsClassifier(n_neighbors=args.neighbors).fit(x_train, y_train)
     print(f"Train: {len(x_train)}; validation: {len(x_val)}; test: {len(x_test)}")
     print(f"Validation accuracy: {accuracy_score(y_val, classifier.predict(x_val)):.2%}")
     print(f"Test accuracy: {accuracy_score(y_test, classifier.predict(x_test)):.2%}")
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with OUTPUT_PATH.open("wb") as output:
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with args.output.open("wb") as output:
         pickle.dump(classifier, output)
-    print(f"Saved classifier to {OUTPUT_PATH}")
+    print(f"Saved classifier to {args.output}")
 
 
 if __name__ == "__main__":

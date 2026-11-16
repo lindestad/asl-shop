@@ -10,12 +10,12 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTRACTOR = ROOT / "load_data.py"
-SAMPLE = ROOT / "data" / "asl_alphabet_train" / "asl_alphabet_train" / "A" / "A1000.jpg"
+SAMPLE = ROOT / "data" / "Test" / "A" / "A0006_test.jpg"
 
 
 @unittest.skipUnless(
     SAMPLE.exists() and (ROOT / "data" / "hand_landmarker.task").exists(),
-    "Download the ASL dataset and MediaPipe model to test real extraction.",
+    "Run sh setup/data.sh and ./setup.sh to test real extraction.",
 )
 class ExtractionTests(unittest.TestCase):
     def run_extractor(self, directory, source, output, workers):

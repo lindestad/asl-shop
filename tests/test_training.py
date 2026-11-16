@@ -25,11 +25,12 @@ class TrainingTests(unittest.TestCase):
                     for _ in range(20):
                         writer.writerow([label, *[coordinate] * 63])
             result = subprocess.run(
-                [sys.executable, str(TRAINER), "--input", str(source), "--output", str(output)],
+                [sys.executable, str(TRAINER), "--input", str(source), "--output", str(output),
+                 "--neighbors", "3"],
                 cwd=directory, text=True, capture_output=True,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("Training rows: 28; held-out rows: 12", result.stdout)
+            self.assertIn("Train: 24; validation: 8; test: 8", result.stdout)
             with output.open("rb") as file:
                 classifier = pickle.load(file)
             self.assertEqual(classifier.n_features_in_, 63)
@@ -54,17 +55,17 @@ class TrainingTests(unittest.TestCase):
     def test_default_input_is_anchored_to_the_repository(self):
         with tempfile.TemporaryDirectory() as directory:
             # A same-named file in cwd must never override the repo's training input.
-            source = Path(directory) / "data" / "extracted_landmarks.csv"
+            source = Path(directory) / "data" / "extractedLandmarks.csv"
             source.parent.mkdir()
             source.write_text("not the dataset", encoding="utf-8")
             result = subprocess.run(
                 [sys.executable, str(TRAINER), "--output", str(Path(directory) / "knn.pkl")],
                 cwd=directory, text=True, capture_output=True,
             )
-            if (ROOT / "data" / "extracted_landmarks.csv").exists():
+            if (ROOT / "data" / "extractedLandmarks.csv").exists():
                 self.assertEqual(result.returncode, 0, result.stderr)
             else:
-                self.assertIn(str(ROOT / "data" / "extracted_landmarks.csv"), result.stderr)
+                self.assertIn(str(ROOT / "data" / "extractedLandmarks.csv"), result.stderr)
 
 
 if __name__ == "__main__":

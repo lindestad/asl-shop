@@ -1,4 +1,4 @@
-"""Extract normalized landmarks from the downloaded ASL Alphabet training images."""
+"""Extract normalized landmarks from the ASL Alphabet training images in data/Train."""
 
 import argparse
 from concurrent.futures import ProcessPoolExecutor
@@ -36,9 +36,9 @@ def extract_image(item):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--input", type=Path, default=ROOT / "data" / "asl_alphabet_train" / "asl_alphabet_train"
+        "--input", type=Path, default=ROOT / "data" / "Train"
     )
-    parser.add_argument("--output", type=Path, default=ROOT / "data" / "extracted_landmarks.csv")
+    parser.add_argument("--output", type=Path, default=ROOT / "data" / "extractedLandmarks.csv")
     parser.add_argument("--samples-per-class", type=positive_int)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
@@ -47,7 +47,7 @@ def main():
     )
     args = parser.parse_args()
     if not args.input.is_dir():
-        parser.error(f"Missing dataset: {args.input}. Run uv run python scripts/download_dataset.py first.")
+        parser.error(f"Missing dataset: {args.input}. Run sh setup/data.sh (Windows: .\\setup\\data.ps1) first.")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     randomizer = random.Random(args.seed)
