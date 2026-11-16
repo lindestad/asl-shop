@@ -22,6 +22,19 @@ sys.path.insert(0, str(ROOT))
 import numpy as np
 
 PACKED = Path(os.environ.get("ASL_PACKED_DIR", ROOT / "data" / "openfs-packed"))
+
+
+def packed_split_dir(pack=PACKED):
+    """prepare_openfs_training.py writes arrays into the generation named by
+    dataset.json; older packs keep them flat at the pack root."""
+    manifest = pack / "dataset.json"
+    if not (pack / "test_clips.json").is_file() and manifest.is_file():
+        generation = (pack / json.loads(manifest.read_text(encoding="utf-8")).get("generation", "")).resolve()
+        if generation.is_relative_to(pack.resolve()) and (generation / "test_clips.json").is_file():
+            return generation
+    return pack
+
+
 # Optional source footage (googleai/fsboard on Kaggle, CC BY 4.0); demo mode plays
 # without video when a clip's mp4 is missing.
 CLIP_VIDEOS = Path(os.environ.get("ASL_DEMO_VIDEO_DIR", ROOT / "data" / "external" / "openfs" / "demo-clips"))
@@ -84,10 +97,11 @@ def main():
     parser.add_argument("--by-index", type=int, dest="by_index",
                         help="replay an arbitrary packed clip index, bypassing the fixed selection")
     args = parser.parse_args()
-    if not (PACKED / "test_clips.json").is_file():
+    packed = packed_split_dir()
+    if not (packed / "test_clips.json").is_file():
         raise SystemExit(f"Packed dataset not found at {PACKED}; set ASL_PACKED_DIR.")
-    clips = json.loads((PACKED / "test_clips.json").read_text(encoding="utf-8"))
-    x = np.load(PACKED / "test_frames.npy", mmap_mode="r")
+    clips = json.loads((packed / "test_clips.json").read_text(encoding="utf-8"))
+    x = np.load(packed / "test_frames.npy", mmap_mode="r")
     if args.by_index is not None:
         if not 0 <= args.by_index < len(clips):
             raise SystemExit(f"Clip index must be between 0 and {len(clips) - 1}.")

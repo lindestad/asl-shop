@@ -18,15 +18,15 @@ df = pd.read_csv(data_path / "extractedLandmarks.csv", header=None, names=cols)
 X = df.drop(columns="label")
 y = df["label"]
 
-# Split into train and test
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+# 60% train, 20% validation, 20% test.
+X_train, X_rest, y_train, y_rest = train_test_split(X, y, test_size=0.4, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_rest, y_rest, test_size=0.5, random_state=42)
 
 svm = LinearSVC(random_state=42, tol=1e-05)
 svm.fit(X_train, y_train)
 
-y_pred = svm.predict(X_test)
-
-print(f"Test Accuracy: {accuracy_score(y_test, y_pred):.2f}")
+print(f"Validation Accuracy: {accuracy_score(y_val, svm.predict(X_val)):.2f}")
+print(f"Test Accuracy: {accuracy_score(y_test, svm.predict(X_test)):.2f}")
 
 with open(model_path / "svm_model.pkl", "wb") as f:
     pickle.dump(svm, f)

@@ -37,7 +37,8 @@ def main():
         x_rest, y_rest, test_size=0.5, random_state=42
     )
 
-    classifier = KNeighborsClassifier(n_neighbors=1).fit(x_train, y_train)
+    # k=28 chosen from cross-validated log loss (see knn-cross-validation.py).
+    classifier = KNeighborsClassifier(n_neighbors=28).fit(x_train, y_train)
     print(f"Train: {len(x_train)}; validation: {len(x_val)}; test: {len(x_test)}")
     print(f"Validation accuracy: {accuracy_score(y_val, classifier.predict(x_val)):.2%}")
     print(f"Test accuracy: {accuracy_score(y_test, classifier.predict(x_test)):.2%}")

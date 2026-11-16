@@ -20,21 +20,26 @@ X = df.drop(columns="label")
 y = df["label"]
 
 # Cross validation testing 
-k_range = range(1, 21)
+k_range = range(1, 51)
 cv_scores = []
 
 # Evaluate each k using 5-fold cross-validation
 for k in tqdm(k_range, desc="Evaluating k"):
     knn = KNeighborsClassifier(n_neighbors=k)
-    scores = cross_val_score(knn, X, y, cv=5, scoring='d2_log_loss_score')
-    cv_scores.append(scores.mean())
+    scores = cross_val_score(knn, X, y, cv=5, scoring='accuracy')
+    mean_cv_score = scores.mean()
+    cv_scores.append(mean_cv_score)
+    if k == 1:
+        print(f"k=1 loss: {mean_cv_score}")
+    if k == 28:
+            print(f"k=28 loss: {mean_cv_score}")
 
 # Plot accuracy vs. k
 plt.figure(figsize=(8, 5))
 plt.plot(k_range, cv_scores, marker='o')
-plt.title("k-NN Cross-Validation loss vs k")
+plt.title("k-NN Cross-Validation accuracy vs k")
 plt.xlabel("Number of Neighbors: k")
-plt.ylabel("Cross-Validated cross entropy")
+plt.ylabel("Cross-Validated accuracy")
 plt.grid(True)
 plt.show()
 

@@ -16,12 +16,15 @@ ENSEMBLE = ROOT / "data" / "models" / "ensemble-2026-10-25-bf16"
 class ReplayTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if not (PACKED / "test_clips.json").is_file():
+        from scripts.demo_replay import packed_split_dir
+
+        packed = packed_split_dir(PACKED)
+        if not (packed / "test_clips.json").is_file():
             raise unittest.SkipTest("Packed OpenFS dataset is required for replay tests")
         import numpy as np
 
-        cls.clips = json.loads((PACKED / "test_clips.json").read_text(encoding="utf-8"))
-        cls.x = np.load(PACKED / "test_frames.npy", mmap_mode="r")
+        cls.clips = json.loads((packed / "test_clips.json").read_text(encoding="utf-8"))
+        cls.x = np.load(packed / "test_frames.npy", mmap_mode="r")
 
     def test_reconstructed_landmarks_reproduce_packed_features(self):
         from types import SimpleNamespace
