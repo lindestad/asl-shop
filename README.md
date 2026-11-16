@@ -53,8 +53,31 @@ None of this is needed to run the app. All data is stored in the Git-ignored `da
 | Demo replay videos (needs a Kaggle API key) | `uv run python scripts/download_demo_videos.py` | ten clips |
 | Retrain the neural models | `./setup.sh --extract-openfs` (Windows: `.\setup.ps1 -ExtractOpenFS`) | 12.7 GB |
 
-Demo replay also needs the packed FSboard landmarks; see the
-[neural guide](docs/neural-recognition.md).
+## Demo replay
+
+Demo replay plays FSboard test clips through the live pipeline, so the app can be
+tried without a camera. It needs the packed FSboard landmarks:
+
+```sh
+./setup.sh --extract-openfs           # Windows: .\setup.ps1 -ExtractOpenFS
+# fetch the four FSboard metadata JSONs into data/external/openfs/metadata,
+# see "Import the OpenFS download" in docs/neural-recognition.md
+uv run python scripts/prepare_openfs_training.py \
+  --input data/external/openfs/extracted/fingerspelling_fsboard_proc_clean \
+  --metadata data/external/openfs/metadata \
+  --output data/openfs-packed --trusted-pickle
+uv run python scripts/demo_replay.py --list    # check that the clips are found
+```
+
+The video footage is optional. Without it, replay sends the reconstructed landmarks
+straight to the recogniser, skipping MediaPipe. To show the clips as video, set
+`KAGGLE_API_TOKEN` (or `KAGGLE_USERNAME` and `KAGGLE_KEY`, or `~/.kaggle/kaggle.json`)
+and run `uv run python scripts/download_demo_videos.py`.
+
+Start the app with `npm run dev`. Once the landmarks are found, a **Dataset replay**
+card appears below the camera: pick a clip and press **Play clip**. Clips with video are
+marked "footage". `ASL_PACKED_DIR` and `ASL_DEMO_VIDEO_DIR` point to the landmarks
+and the clips when they are stored somewhere else.
 
 ## Retrain the letter models
 
