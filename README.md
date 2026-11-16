@@ -131,6 +131,9 @@ Training and evaluation of the neural models is covered in the
 
 ## Develop
 
+These commands are only tested and working on Linux. On macOS and Windows, run the
+app with `npm run dev` instead (see [Try it](#try-it)); it works just as well there.
+
 ```sh
 npm run lint
 npm run format:check
