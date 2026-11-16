@@ -45,32 +45,41 @@ def extract_archive(source, destination):
             temporary.replace(target)
 
 
+def fetch_archive(filename, directory, *, extract=False, verify=False):
+    """Download (or reuse) one archive, optionally validating and extracting it."""
+    archive_path = directory / filename
+    if archive_ready(archive_path):
+        print(f"Using existing archive: {archive_path}", flush=True)
+    else:
+        try:
+            import gdown
+        except ImportError as error:
+            raise RuntimeError("Run: uv run --with gdown python scripts/download_openfs.py") from error
+        gdown.download(id=ARCHIVES[filename], output=str(archive_path), resume=True, quiet=False)
+        if not archive_ready(archive_path):
+            raise ValueError(f"Download is incomplete or not a ZIP: {archive_path}; rerun to resume.")
+    if verify:
+        with ZipFile(archive_path) as archive:
+            failed = archive.testzip()
+            if failed:
+                raise ValueError(f"Corrupt ZIP member: {filename}/{failed}")
+    if extract:
+        extract_archive(archive_path, directory / "extracted")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--directory", type=Path, default=ROOT / "data/external/openfs")
     parser.add_argument("--extract", action="store_true", help="Extract into DIRECTORY/extracted, preserving ZIPs")
     parser.add_argument("--verify", action="store_true", help="Read every ZIP member to validate CRC; can take minutes")
+    parser.add_argument("--only", choices=("raw", "proc_clean"),
+                        help="Fetch one archive instead of both; demo replay needs only proc_clean")
     args = parser.parse_args()
     args.directory.mkdir(parents=True, exist_ok=True)
-    for filename, file_id in ARCHIVES.items():
-        archive_path = args.directory / filename
-        if archive_ready(archive_path):
-            print(f"Using existing archive: {archive_path}", flush=True)
-        else:
-            try:
-                import gdown
-            except ImportError as error:
-                raise RuntimeError("Run: uv run --with gdown python scripts/download_openfs.py") from error
-            gdown.download(id=file_id, output=str(archive_path), resume=True, quiet=False)
-            if not archive_ready(archive_path):
-                raise ValueError(f"Download is incomplete or not a ZIP: {archive_path}; rerun to resume.")
-        if args.verify:
-            with ZipFile(archive_path) as archive:
-                failed = archive.testzip()
-                if failed:
-                    raise ValueError(f"Corrupt ZIP member: {filename}/{failed}")
-        if args.extract:
-            extract_archive(archive_path, args.directory / "extracted")
+    for filename in ARCHIVES:
+        if args.only and filename != f"fingerspelling_fsboard_{args.only}.zip":
+            continue
+        fetch_archive(filename, args.directory, extract=args.extract, verify=args.verify)
     print("OpenFS archives are ready. Signer metadata and preprocessing are described in docs/neural-recognition.md.")
 
 

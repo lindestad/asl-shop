@@ -50,11 +50,55 @@ None of this is needed to run the app. All data is stored in the Git-ignored `da
 | Purpose | Command | Size |
 |---|---|---|
 | Retrain KNN/SVM/CNN, run the desktop tests | `sh setup/data.sh` (Windows: `.\setup\data.ps1`) | 900 MB |
-| Demo replay videos (needs a Kaggle API key) | `uv run python scripts/download_demo_videos.py` | ten clips |
+| Demo replay without a camera (needs a Kaggle API key) | see [Demo replay](#demo-replay-no-camera) | 6.5 GB download, 24 GB on disk |
 | Retrain the neural models | `./setup.sh --extract-openfs` (Windows: `.\setup.ps1 -ExtractOpenFS`) | 12.7 GB |
 
-Demo replay also needs the packed FSboard landmarks; see the
-[neural guide](docs/neural-recognition.md).
+## Demo replay (no camera)
+
+Demo replay plays ten FSboard clips through the live pipeline. It needs the clip
+videos **and** the packed FSboard landmarks; the "Dataset replay" card stays hidden
+until both are in place. One script fetches and prepares everything.
+
+**1. Get a Kaggle API key** (free, needed for the videos and the signer metadata):
+
+1. Create an account or sign in at [kaggle.com](https://www.kaggle.com).
+2. Open [kaggle.com/settings/api](https://www.kaggle.com/settings/api) and generate an API token.
+3. Set it in the shell you will run the script from:
+
+   ```sh
+   export KAGGLE_API_TOKEN='your-token'          # macOS / Linux
+   ```
+
+   ```powershell
+   $env:KAGGLE_API_TOKEN = 'your-token'          # Windows PowerShell
+   ```
+
+   A legacy `kaggle.json` saved to `~/.kaggle/kaggle.json` (Windows:
+   `%USERPROFILE%\.kaggle\kaggle.json`) also works; on macOS/Linux run
+   `chmod 600 ~/.kaggle/kaggle.json`. Keep the key outside the repository.
+
+**2. Run the setup script, then start the app:**
+
+```sh
+uv run --with gdown python scripts/setup_demo_replay.py
+npm run dev
+```
+
+**This takes a while.** A first run downloads about 6.5 GB and uses about 24 GB of
+disk; expect 15–30 minutes or more depending on your connection. If it stops
+halfway (the large download can drop), run the same command again: finished steps
+are skipped and the download resumes.
+
+The script checks the Kaggle key first, then:
+
+1. downloads the ten demo videos from Kaggle to `data/external/openfs/demo-clips/`;
+2. downloads the FSboard signer metadata from Kaggle to `data/external/openfs/metadata/` (about 100 MB);
+3. downloads and extracts the OpenFS landmark archive from Google Drive to `data/external/openfs/` (6.4 GB, the slow step);
+4. packs the landmarks into `data/openfs-packed/` and checks that all ten clips are listed.
+
+Afterwards only `data/openfs-packed/` and `demo-clips/` are needed. Deleting
+`data/external/openfs/fingerspelling_fsboard_proc_clean.zip` and
+`data/external/openfs/extracted/` frees about 13 GB.
 
 ## Retrain the letter models
 
