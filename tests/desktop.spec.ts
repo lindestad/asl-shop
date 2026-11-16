@@ -13,8 +13,8 @@ declare global {
 }
 
 test.beforeEach(() => {
-  const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
-  test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration tests.");
+  const sample = path.resolve("data/Test/A/A0006_test.jpg");
+  test.skip(!existsSync(sample), "Run sh setup/data.sh to run the desktop integration tests.");
   if (!process.env.ASL_SHOP_TEST_APP) {
     expect(
       existsSync(path.resolve("model/trained_models/knn_model.pkl")),
@@ -24,8 +24,8 @@ test.beforeEach(() => {
 });
 
 test("Electron recognizes a letter from an image with the trained model", async () => {
-  const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
-  test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration test.");
+  const sample = path.resolve("data/Test/A/A0006_test.jpg");
+  test.skip(!existsSync(sample), "Run sh setup/data.sh to run the desktop integration test.");
   const application = await electron.launch({
     executablePath: process.env.ASL_SHOP_TEST_APP,
     args: process.env.ASL_SHOP_TEST_APP ? [] : ["."],
@@ -51,8 +51,8 @@ test("Electron recognizes a letter from an image with the trained model", async 
 });
 
 test("camera recognizes letters, keeps up with video, finds new hands, and restarts", async () => {
-  const sample = path.resolve("data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg");
-  test.skip(!existsSync(sample), "Download the ASL dataset to run the desktop integration test.");
+  const sample = path.resolve("data/Test/A/A0006_test.jpg");
+  test.skip(!existsSync(sample), "Run sh setup/data.sh to run the desktop integration test.");
   const application = await electron.launch({
     executablePath: process.env.ASL_SHOP_TEST_APP,
     args: process.env.ASL_SHOP_TEST_APP ? [] : ["."],

@@ -47,7 +47,7 @@ def main():
     )
     args = parser.parse_args()
     if not args.input.is_dir():
-        parser.error(f"Missing dataset: {args.input}. Run sh setup/data.sh first.")
+        parser.error(f"Missing dataset: {args.input}. Run sh setup/data.sh (Windows: .\\setup\\data.ps1) first.")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     randomizer = random.Random(args.seed)

@@ -1,73 +1,28 @@
 # ASL Shop
 
-The [neural letter and temporal fingerspelling pipeline](docs/neural-recognition.md)
-provides current-letter and spelled-text outputs. `uv sync` installs PyTorch and
-all runtime dependencies. The live handshape/sequence checkpoints and four-member
-ens4 ensemble ship in this repo; Finish uses ens4 automatically, with no model-path
-export or external OpenFS checkout. Set `ASL_ENSEMBLE_MODEL_DIR` to use other weights.
-The existing KNN remains a static-letter fallback.
+A desktop app that recognises American Sign Language fingerspelling from a webcam.
+Everything runs locally: Electron shows the camera, and a Python process finds the
+hands with MediaPipe and classifies them.
 
-Download the ten example videos from [FSboard on Kaggle](https://www.kaggle.com/datasets/googleai/fsboard):
+## Features
 
-```sh
-uv run python scripts/download_demo_videos.py
-```
+- **Current letter** from the live camera, with a choice of three models:
+  - **Neural** (default): a small network trained on FSboard.
+  - **KNN** and **CNN**: trained on the Mendeley ASL Alphabet images.
+- **Spelled text**: a sequence model writes out words as you sign, including the
+  motion letters J and Z, which the single-frame models cannot recognise.
+- **Finish correction**: when a word ends, a four-model ensemble re-reads the whole
+  segment and corrects the text.
+- **Scratchpad** that collects finished words for editing and copying.
+- **Demo replay**: plays FSboard clips through the same pipeline, without a camera.
 
-The script reuses existing videos in `data/external/openfs/demo-clips` and prints
-Kaggle API key setup instructions if credentials are missing. Videos stay local
-and untracked. Use `--directory PATH` (and `ASL_DEMO_VIDEO_DIR` when launching the app)
-for another location. Demo replay also requires the packed OpenFS test landmarks
-in `data/openfs-packed`; see the [data preparation guide](docs/neural-recognition.md).
-The bundled OpenFS-trained weights retain their research-only, non-commercial terms.
+The trained models ship with the repository, so no dataset is needed to run the app.
 
-The [measured FSboard results and reproduction commands](docs/training-results-2026-10-12.md)
-compare the legacy-data KNN, trained handshape/causal models and released OpenFS
-checkpoint on held-out signers. Static scores use model-derived labels; live
-held-letter accuracy and idle rejection still need human-labelled evaluation.
+## Try it
 
-The official OpenFS FSboard downloads can be resumed and extracted with:
+Requirements: macOS, Linux or Windows, and a webcam.
 
-```powershell
-uv run --with gdown python scripts/download_openfs.py --directory 'C:\Users\danie\dev\asl-shop\data\external\openfs' --extract
-```
-
-The two archives are `fingerspelling_fsboard_raw.zip` (re-extracted landmarks,
-not video) and `fingerspelling_fsboard_proc_clean.zip` (model-derived cleaned frame
-annotations). Existing ZIPs are reused and retained. Add `--verify` for a full CRC
-scan. On macOS/Linux, `./setup.sh` installs all runtime dependencies;
-`./setup.sh --extract-openfs --openfs-dir /path/to/openfs` also prepares the data.
-The optional OpenFS download is approximately 12.7 GB compressed. Dataset and
-upstream code terms remain those of [OpenFS](https://github.com/AIRC-KETI/OpenFS).
-
-Native Windows setup is available with uv and Node.js 22.12+ installed:
-
-```powershell
-.\setup.ps1
-.\setup.ps1 -ExtractOpenFS -OpenFSDir 'C:\Users\danie\dev\asl-shop\data\external\openfs'
-```
-
-The default `setup.ps1` installs neural dependencies and skips the OpenFS dataset. `-OpenFS` resumes or
-reuses the archives without extraction; `-ExtractOpenFS` also extracts them.
-Add `-Plan` to inspect commands without modifying anything. Launch trained
-checkpoints with `scripts/start-neural.ps1`; see
-the [neural guide](docs/neural-recognition.md#run-the-app) for external model paths.
-
-En Electron-app for gjenkjenning av ASL-bokstaver fra live kamera eller ett bilde.
-Appen har to visninger: **Live kamera** og **Bilde**. Bilder og kamerarammer analyseres
-lokalt av en Python-prosess med MediaPipe Hand Landmarker.
-
-**Bokstavmodeller:** En nedtrekksmeny i kameravisningen velger mellom en KNN- og en
-CNN-modell, begge trent på landemerker fra ASL Alphabet-datasettet. De bruker de samme
-63 normaliserte håndkoordinatene som kamera- og bildeanalysen. Modellene ligger i
-`model/trained_models/` og inkluderes ved pakking. KNN-modellen bruker k=28 og viser
-andelen av de nærmeste treningseksemplene som stemmer for bokstaven; CNN-modellen viser softmax-sannsynligheten, som ikke er
-kalibrert. Ved under 60 % vises ingen bokstav.
-J og Z er bevegelsestegn i ASL, så en modell som bare ser ett bilde om gangen kan
-ikke gjenkjenne hele bevegelsen.
-
-## Kom i gang
-
-På macOS eller Linux, fra repo-roten:
+**macOS / Linux** — installs uv, Node.js and all dependencies if they are missing:
 
 ```sh
 ./setup.sh
@@ -75,92 +30,78 @@ source data/setup-env.sh
 npm run dev
 ```
 
-`npm run dev` starter Vite og Electron. Frontend-kode oppdateres av Vite; endringer i
-`electron/` starter Electron-prosessen på nytt. `npm run dev:web` viser bare
-grensesnittet i nettleser, uten lokal gjenkjenning.
+**Windows** — install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+and [Node.js 22.12+](https://nodejs.org/en/download) first:
 
-`setup.sh` installerer prosjektets Node- og Python-avhengigheter og MediaPipe-modellen.
-Originalbilder, landemerkeuttrekket (`data/extractedLandmarks.csv`) og andre treningsdata
-ligger lokalt i den Git-ignorerte `data/`-mappen og følger ikke med i repoet.
-Modellene for gjenkjenning følger med i repoet, så appen kan startes etter oppsett.
-
-Last bare ned originalbildene hvis du vil trene bokstavmodellene på nytt. De er trent
-på ASL Alphabet-datasettet fra Mendeley (24 statiske bokstaver, uten J og Z), som
-`setup/data.sh` laster ned til `data/Train` og `data/Test`:
-
-```sh
-sh setup/data.sh
-uv run python load_data.py
-uv run python model/knn.py
+```powershell
+.\setup.ps1
+npm run dev
 ```
 
-`load_data.py` erstatter det lokale CSV-uttrekket. Bruk `--output data/my_landmarks.csv`
-og `model/knn.py --input data/my_landmarks.csv --output data/my_knn.pkl` for et forsøk
-som ikke endrer uttrekket eller den versjonerte modellen. `model/svm.py`,
-`model/cnn-landmarks.py` og `model/knn-cross-validation.py` leser det samme uttrekket
-gjennom `model/landmarks.py`, som godtar CSV-filer med og uten overskriftsrad.
+Press **Start camera**, hold up a letter, and pick a model from the dropdown.
 
-`load_data.py` bruker samme normalisering som appen og skriver 63 koordinater per hånd
-til `data/extractedLandmarks.csv`. Uten valg behandles alle treningsbildene. For en
-raskere prøve, bruk `uv run python load_data.py --samples-per-class 120 --seed 42`.
-Uttrekket bruker opptil fire CPU-prosesser som standard. `--workers 2` bruker færre
-ressurser på en laptop; `--workers 1` kjører sekvensielt. Hver prosess gjenbruker sin
-egen MediaPipe-detektor. Radrekkefølgen og seed er de samme uansett antall prosesser.
-Fremdriften viser bilder per sekund og anslått tid igjen. Et eksisterende CSV-uttrekk
-erstattes først når hele jobben er ferdig, slik at avbrudd ikke ødelegger det.
-Antallet rader kan avvike fra antallet bilder, fordi noen bilder ikke gir hånddeteksjon.
+MediaPipe uses the GPU when it can and falls back to the CPU; set
+`ASL_MEDIAPIPE_DELEGATE=cpu` to skip the GPU attempt.
 
-`model/knn.py` bruker et fast 60/20/20-utvalg (trening/validering/test) med seed 42 og
-k=28 (`--neighbors`), skriver antall rader i hvert utvalg og måler nøyaktighet på
-validerings- og testradene før `model/trained_models/knn_model.pkl` lagres.
-Evalueringen bruker samme bildedatasett som treningen og måler ikke generalisering til
-nye personer, bakgrunner og lysforhold.
-Begge skriptene har `--input` og `--output` for andre lokale filbaner. Standardbanene
-er relative til repo-roten, uavhengig av terminalens arbeidsmappe.
+## Optional data
 
-For å kjøre appen trengs `data/hand_landmarker.task` og modellene i
-`model/trained_models/`. PyTorch installeres som en vanlig prosjektavhengighet. Uten bokstavmodellen vises håndlandemerker, men ingen bokstav. Pakkede apper
-inkluderer modellene og krever verken treningsdatasettet eller en Python-installasjon.
-Last bare pickle-modeller som du selv har trent eller stoler på.
+None of this is needed to run the app. All data is stored in the Git-ignored `data/` folder.
 
-## Struktur
+| Purpose | Command | Size |
+|---|---|---|
+| Retrain KNN/SVM/CNN, run the desktop tests | `sh setup/data.sh` (Windows: `.\setup\data.ps1`) | 900 MB |
+| Demo replay videos (needs a Kaggle API key) | `uv run python scripts/download_demo_videos.py` | ten clips |
+| Retrain the neural models | `./setup.sh --extract-openfs` (Windows: `.\setup.ps1 -ExtractOpenFS`) | 12.7 GB |
 
-- `frontend/`: React-visningene for kamera og bilde.
-- `electron/main.mjs`: vindu, lokale kamera­tillatelser og validerte IPC-kall.
-- `electron/preload.cjs`: begrenset API for bildevalg og gjenkjenning.
-- `electron/recognition.mjs`: styrer den lokale Python-prosessen.
-- `scripts/recognition_worker.py`: hånddeteksjon og bokstavklassifisering.
-- `model/knn.py`: trening og enkel evaluering av bokstavmodellen.
-- `load_data.py`: uttrekk av landemerker til lokal CSV.
-- `handTracker/`: MediaPipe-hjelpere som brukes av worker-prosessen.
+Demo replay also needs the packed FSboard landmarks; see the
+[neural guide](docs/neural-recognition.md).
 
-Renderer-prosessen er sandboxed, har context isolation og ingen Node-integrasjon.
-Den pakkede frontend-en lastes gjennom en begrenset `app://`-protokoll.
-
-## Sjekk og bygg
+## Retrain the letter models
 
 ```sh
-npm run build
+sh setup/data.sh                      # images to data/Train and data/Test
+uv run python load_data.py            # landmarks to data/extractedLandmarks.csv
+uv run python model/knn.py            # or model/svm.py, model/cnn-landmarks.py
+```
+
+`load_data.py` and `model/knn.py` accept `--input` and `--output`, so an experiment
+can leave the shipped model untouched. The accuracy they print is measured on images
+from the same dataset and does not show how well a model handles new people or lighting.
+
+Training and evaluation of the neural models is covered in the
+[neural guide](docs/neural-recognition.md) and the
+[measured results](docs/training-results-2026-10-12.md).
+
+## Project layout
+
+| Path | Contents |
+|---|---|
+| `frontend/` | React interface: camera view, model picker, scratchpad |
+| `electron/` | Window, camera permission, and the bridge to the Python process |
+| `scripts/recognition_worker.py` | Hand detection and classification for each frame |
+| `handTracker/` | MediaPipe helpers and landmark normalisation |
+| `model/` | Model definitions, the live runtime, and KNN/SVM/CNN training scripts |
+| `model/trained_models/`, `data/*.pt`, `data/models/` | Shipped model weights |
+| `scripts/` | Dataset preparation, training and evaluation tools |
+| `docs/` | [Pipeline walkthrough](docs/pipeline.md), training guide and results |
+
+## Develop
+
+```sh
 npm run lint
 npm run format:check
-npm test
+npm run build
+npm test                                                    # Playwright, web and desktop
 uv run python -m unittest discover -s tests -p "test_*.py"
-npm run package
+npm run package                                             # unpacked app in release/
 ```
 
-`npm run package` bygger frontend og Python-backend, og lager en utpakket app i
-`release/`. `npm run dist` lager installasjonsformatet for plattformen som kjøres.
-Python, MediaPipe, håndmodellen og bokstavmodellen følger med i den pakkede appen; ASL-datasettet
-gjør det ikke. Bygg på operativsystemet og arkitekturen du vil distribuere til.
+`npm run dist` builds an installer for the current platform, with Python and all
+models bundled.
 
-Pakkingen bruker `electron-builder`. [Electrons pakkeveiledning](https://www.electronjs.org/docs/latest/tutorial/tutorial-packaging)
-anbefaler Forge, mens [oversikten over alternativer](https://www.electronjs.org/docs/latest/tutorial/forge-overview)
-omtaler `electron-builder` som et tredjepartsvalg uten offisiell støtte fra
-Electron-prosjektet. Selve Electron-integrasjonen følger
-[sikkerhetsveiledningen](https://www.electronjs.org/docs/latest/tutorial/security/)
-for preload, context isolation, sandboxing, IPC-validering, tillatelser og lokal protokoll.
+## Licences and safety
 
-Desktop-integrasjonstesten bruker
-`data/asl_alphabet_train/asl_alphabet_train/A/A1000.jpg` fra Kaggle-versjonen av ASL Alphabet, som bare brukes som testbilde.
-Last den ned med `uv run python scripts/download_dataset.py` før du kjører desktop-testene. De sjekker også
-kamerahastighet, nye hender, stopp, omstart og bytte av visning.
+- The neural weights are trained on FSboard through [OpenFS](https://github.com/AIRC-KETI/OpenFS)
+  and are for research and non-commercial use only.
+- The Mendeley [ASL Alphabet dataset](https://data.mendeley.com/datasets/jdyksv2jhh/1) is CC BY 4.0.
+- The KNN and CNN models are pickle files; only load ones you trained or trust.

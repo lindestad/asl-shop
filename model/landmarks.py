@@ -1,8 +1,7 @@
 """Shared loader for the landmark CSV behind the KNN, SVM and CNN letter models.
 
 The CSV is a label column followed by 63 coordinates in x0,y0,z0,... order.
-A header row is optional: handTracker/landmark_extraction.py writes none,
-load_data.py writes one.
+A header row is optional: load_data.py writes one, older extracts have none.
 """
 
 from pathlib import Path

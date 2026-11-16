@@ -194,7 +194,7 @@ class RefinerTests(unittest.TestCase):
         source = Path(os.environ.get("ASL_OPENFS_SOURCE", ROOT / ".build/openfs"))
         model_directory = Path(os.environ.get("ASL_OPENFS_MODEL_DIR", ROOT / "data/openfs-checkpoints/recognizer_fsboard"))
         data = Path(os.environ.get("ASL_SHOP_TEST_DATA_ROOT", ROOT / "data"))
-        image = data / "asl_alphabet_train/asl_alphabet_train/A/A1000.jpg"
+        image = data / "Test/A/A0006_test.jpg"
         landmarker = Path(os.environ.get("ASL_MEDIAPIPE_MODEL", data / "hand_landmarker.task"))
         if not all(path.is_file() for path in (image, landmarker, ROOT / "data/handshape.pt", ROOT / "data/sequence.pt", source / "lib/models/recognizer.py", model_directory / "best_model.pth")):
             self.skipTest("Real trained models, detector and public test image not available")
