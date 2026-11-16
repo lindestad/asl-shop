@@ -56,6 +56,7 @@ class RefinerTests(unittest.TestCase):
         runtime.loaded = True
         runtime.models["sequence"] = AModel()
         runtime.refiner = refiner
+        runtime.ensemble.enabled = False
         return runtime
 
     def test_finish_refines_once_keeps_raw_pixels_and_stays_sticky(self):
